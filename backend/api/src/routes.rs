@@ -1,32 +1,29 @@
+#[cfg(feature = "openapi")]
+use crate::openapi;
 use crate::{
-openapi-doc
-    openapi::ApiDoc,
-    batch_verify_handlers,
-    handlers,
-    metrics_handler,
-    breaking_changes,
-    deprecation_handlers,
-    custom_metrics_handlers,
-    state::AppState,
-    breaking_changes, compatibility_testing_handlers, custom_metrics_handlers,
-    deprecation_handlers, handlers, metrics_handler, migration_handlers, state::AppState,
+    ab_test_handlers, activity_feed_handlers, auth, auth_handlers, batch_verify_handlers,
+    breaking_changes, canary_handlers, compatibility_testing_handlers, custom_metrics_handlers,
+    deprecation_handlers, handlers, metrics_handler, migration_handlers, performance_handlers,
+    resource_handlers, simulation_handlers, state::AppState,
+};
 use axum::{
     middleware,
     routing::{get, patch, post},
     Router,
 };
-
-use crate::{
-    ab_test_handlers, activity_feed_handlers, auth, batch_verify_handlers, breaking_changes,
-    canary_handlers, compatibility_testing_handlers, custom_metrics_handlers, deprecation_handlers,
-    handlers, metrics_handler, migration_handlers, performance_handlers, simulation_handlers,
-    state::AppState,
-};
+#[cfg(feature = "openapi")]
 use utoipa::OpenApi;
+#[cfg(feature = "openapi")]
 use utoipa_swagger_ui::SwaggerUi;
 
 pub fn observability_routes() -> Router<AppState> {
     Router::new().route("/metrics", get(metrics_handler::metrics_endpoint))
+}
+
+pub fn auth_routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/auth/challenge", get(auth_handlers::get_challenge))
+        .route("/api/auth/verify", post(auth_handlers::verify_challenge))
 }
 
 pub fn contract_routes() -> Router<AppState> {
@@ -139,6 +136,10 @@ pub fn contract_routes() -> Router<AppState> {
                 .post(custom_metrics_handlers::record_contract_metric),
         )
         .route(
+            "/api/contracts/:id/resources",
+            get(resource_handlers::get_contract_resources),
+        )
+        .route(
             "/api/contracts/:id/metrics/batch",
             post(custom_metrics_handlers::record_metrics_batch),
         )
@@ -188,9 +189,16 @@ pub fn contract_routes() -> Router<AppState> {
     // to be integrated with the main AppState
 }
 
+#[cfg(not(feature = "openapi"))]
 pub fn openapi_routes() -> Router<AppState> {
     Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+}
+
+#[cfg(feature = "openapi")]
+pub fn openapi_routes() -> Router<AppState> {
+    Router::new().merge(
+        SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi::ApiDoc::openapi()),
+    )
 }
 
 pub fn publisher_routes() -> Router<AppState> {

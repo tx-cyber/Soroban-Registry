@@ -374,7 +374,7 @@ pub enum SortOrder {
 }
 
 /// Search/filter parameters for contracts
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct ContractSearchParams {
     pub query: Option<String>,
     pub network: Option<Network>,

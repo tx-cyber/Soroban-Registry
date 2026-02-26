@@ -212,7 +212,7 @@ impl CacheLayer {
                 if let Ok(Some(abi)) = sqlx::query_scalar::<_, serde_json::Value>(
                     "SELECT abi FROM contract_abis WHERE contract_id = $1 ORDER BY created_at DESC LIMIT 1"
                 )
-                .bind(&id)
+                .bind(id)
                 .fetch_optional(&pool).await {
                     self.abi_cache.insert(contract_id.clone(), abi.to_string()).await;
                 }

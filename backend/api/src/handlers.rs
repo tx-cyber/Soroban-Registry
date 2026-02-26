@@ -25,7 +25,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 /// Query params for GET /contracts/:id (Issue #43)
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
 pub struct GetContractQuery {
     pub network: Option<Network>,
 }
@@ -156,7 +156,6 @@ async fn write_contract_audit_log(
     Ok(())
 }
 
-openapi-doc
 #[utoipa::path(
     get,
     path = "/health",
@@ -322,7 +321,6 @@ async fn record_contract_interaction(
     Ok(interaction_id)
 }
 
-main
 struct ContractInteractionInsert<'a> {
     contract_id: Uuid,
     account: Option<&'a str>,
@@ -700,7 +698,6 @@ pub async fn get_contract_versions(
     Ok(Json(versions))
 }
 
-openapi-doc
 #[utoipa::path(
     post,
     path = "/api/contracts/{id}/versions",
@@ -785,7 +782,6 @@ pub async fn get_contract_changelog(
     }))
 }
 
-main
 pub async fn create_contract_version(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -1372,7 +1368,7 @@ pub async fn get_publisher_contracts(
     })?;
 
     // Validate and cap limit (max 100)
-    let limit = query.limit.max(1).min(100);
+    let limit = query.limit.clamp(1, 100);
     let offset = query.offset.max(0);
 
     // Get total count
@@ -1770,7 +1766,6 @@ pub async fn get_impact_analysis(
     }))
 }
 
-openapi-doc
 #[utoipa::path(
     get,
     path = "/api/contracts/trending",
@@ -1779,8 +1774,6 @@ openapi-doc
     ),
     tag = "Contracts"
 )]
-pub async fn get_trending_contracts() -> impl IntoResponse {
-    Json(json!({"trending": []}))
 pub async fn get_trending_contracts(
     State(state): State<AppState>,
     Query(params): Query<TrendingParams>,
@@ -1883,7 +1876,6 @@ pub async fn get_trending_contracts(
         "limit": limit,
         "trending": trending
     })))
-main
 }
 
 #[utoipa::path(

@@ -1,11 +1,11 @@
-use utoipa::OpenApi;
-use crate::handlers;
 use crate::breaking_changes;
 use crate::custom_metrics_handlers;
 use crate::deprecation_handlers;
+use crate::handlers;
 use crate::metrics_handler;
-use shared::models::*;
 use serde_json::Value;
+use shared::models::*;
+use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(

@@ -4,6 +4,7 @@ mod ab_test_handlers;
 mod aggregation;
 mod analytics;
 mod auth;
+mod auth_handlers;
 mod batch_verify_handlers;
 mod breaking_changes;
 mod cache;
@@ -25,11 +26,15 @@ mod health_tests;
 mod metrics;
 mod metrics_handler;
 mod migration_handlers;
+#[cfg(feature = "openapi")]
+mod openapi;
 mod performance_handlers;
 mod rate_limit;
 mod release_notes_handlers;
 mod release_notes_routes;
 pub mod request_tracing;
+mod resource_handlers;
+mod resource_tracking;
 mod routes;
 pub mod security_log;
 pub mod signing_handlers;
@@ -135,15 +140,10 @@ async fn main() -> Result<()> {
         tracing::error!("Failed to register metrics: {}", e);
     }
 
-    // Initialize Job Engine
-    let (job_engine, job_rx) = soroban_batch::engine::JobEngine::new();
-    let job_engine = Arc::new(job_engine);
-    let job_engine_worker = job_engine.clone();
-    
-    // Spawn background worker
-    tokio::spawn(async move {
-        job_engine_worker.run_worker(job_rx).await;
-    });
+    // Job engine omitted: optional dependency; add soroban_batch and uncomment to enable.
+    // let (job_engine, job_rx) = soroban_batch::engine::JobEngine::new();
+    // let job_engine = Arc::new(job_engine);
+    // tokio::spawn(async move { job_engine.clone().run_worker(job_rx).await });
 
     // Create app state
     let is_shutting_down = Arc::new(AtomicBool::new(false));
@@ -203,6 +203,7 @@ main
 
     // Build router
     let app = Router::new()
+        .merge(routes::auth_routes())
         .merge(routes::contract_routes())
         .merge(routes::publisher_routes())
         .merge(routes::health_routes())

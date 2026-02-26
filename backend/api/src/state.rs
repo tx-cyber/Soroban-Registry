@@ -1,9 +1,11 @@
+use crate::auth::AuthManager;
 use crate::cache::{CacheConfig, CacheLayer};
 use crate::health_monitor::HealthMonitorStatus;
+use crate::resource_tracking::ResourceManager;
 use prometheus::Registry;
 use sqlx::PgPool;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 /// Application state shared across handlers
@@ -16,6 +18,8 @@ pub struct AppState {
     pub job_engine: Arc<soroban_batch::engine::JobEngine>,
     pub is_shutting_down: Arc<AtomicBool>,
     pub health_monitor_status: HealthMonitorStatus,
+    pub auth_mgr: Arc<RwLock<AuthManager>>,
+    pub resource_mgr: Arc<RwLock<ResourceManager>>,
 }
 
 impl AppState {
@@ -26,6 +30,10 @@ impl AppState {
         is_shutting_down: Arc<AtomicBool>,
     ) -> Self {
         let config = CacheConfig::from_env();
+        let auth_mgr = Arc::new(RwLock::new(
+            AuthManager::from_env().expect("JWT config validated at startup"),
+        ));
+        let resource_mgr = Arc::new(RwLock::new(ResourceManager::new()));
         Self {
             db,
             started_at: Instant::now(),
@@ -34,6 +42,8 @@ impl AppState {
             job_engine,
             is_shutting_down,
             health_monitor_status: HealthMonitorStatus::default(),
+            auth_mgr,
+            resource_mgr,
         }
     }
 }

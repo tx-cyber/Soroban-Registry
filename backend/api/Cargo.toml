@@ -5,6 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[features]
+default = []
+openapi = []
+
 [[bin]]
 name = "api"
 path = "src/main.rs"
@@ -51,3 +55,6 @@ regex = "1.10"
 lazy_static = "1.4"
 wasmparser = { workspace = true }
 contract_abi = { path = "../contract_abi" }
+rust_decimal = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
