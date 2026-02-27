@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     disaster_recovery_models::{
         CreateDisasterRecoveryPlanRequest, DisasterRecoveryPlan, ExecuteRecoveryRequest,
-        RecoveryMetrics, RecoveryNotification,
+        RecoveryMetrics,
     },
     error::{ApiError, ApiResult},
     state::AppState,

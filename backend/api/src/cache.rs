@@ -1,6 +1,5 @@
 use moka::future::Cache as MokaCache;
 use sqlx::PgPool;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -164,7 +163,7 @@ impl CacheLayer {
         (result, hit)
     }
 
-    pub async fn put(&self, ns: &str, key: &str, value: String, ttl: Option<Duration>) {
+    pub async fn put(&self, ns: &str, key: &str, value: String, _ttl: Option<Duration>) {
         if !self.config.enabled {
             return;
         }

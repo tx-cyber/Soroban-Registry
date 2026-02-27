@@ -16,7 +16,6 @@ use axum::{
 };
 use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
-use serde_json::json;
 use std::net::SocketAddr;
 use uuid::Uuid;
 

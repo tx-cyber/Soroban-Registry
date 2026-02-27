@@ -194,9 +194,7 @@ impl DatabaseWriter {
         let mut publisher_map = std::collections::HashMap::new();
 
         for deployer in deployers {
-            let publisher_id = self
-                .get_or_create_publisher_tx(&mut tx, deployer)
-                .await?;
+            let publisher_id = self.get_or_create_publisher_tx(&mut tx, deployer).await?;
             publisher_map.insert(deployer, publisher_id);
         }
 
@@ -208,13 +206,8 @@ impl DatabaseWriter {
         );
 
         query_builder.push_values(deployments.iter(), |mut b, deployment| {
-            let publisher_id = publisher_map
-                .get(deployment.deployer.as_str())
-                .unwrap();
-            let wasm_hash = format!(
-                "{}_{}",
-                deployment.contract_id, deployment.op_id
-            );
+            let publisher_id = publisher_map.get(deployment.deployer.as_str()).unwrap();
+            let wasm_hash = format!("{}_{}", deployment.contract_id, deployment.op_id);
             b.push_bind(Uuid::new_v4())
                 .push_bind(&deployment.contract_id)
                 .push_bind(wasm_hash)
@@ -226,8 +219,7 @@ impl DatabaseWriter {
                 .push_bind(now);
         });
 
-        query_builder
-            .push(" ON CONFLICT (contract_id, network) DO NOTHING RETURNING contract_id");
+        query_builder.push(" ON CONFLICT (contract_id, network) DO NOTHING RETURNING contract_id");
 
         let query = query_builder.build();
         let rows = query.fetch_all(&mut *tx).await.map_err(|e| {
@@ -331,10 +323,7 @@ impl DatabaseWriter {
     ///
     ///    Fix: use sqlx's native `Uuid` type via `row.try_get::<Uuid, _>("id")`
     ///    which handles both binary and text wire formats correctly.
-    async fn get_or_create_publisher(
-        &self,
-        address: &str,
-    ) -> Result<Uuid, DatabaseError> {
+    async fn get_or_create_publisher(&self, address: &str) -> Result<Uuid, DatabaseError> {
         debug!("Getting or creating publisher for address: {}", address);
 
         let now = chrono::Utc::now();

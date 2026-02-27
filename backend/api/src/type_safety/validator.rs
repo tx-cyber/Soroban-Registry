@@ -2,7 +2,7 @@
 //!
 //! Validates contract function calls for type safety before submission.
 
-use super::parser::{parse_value_string, ParseError};
+use super::parser::parse_value_string;
 use super::types::*;
 use serde::{Deserialize, Serialize};
 
@@ -386,6 +386,7 @@ impl CallValidator {
     }
 
     /// Check if two types are compatible
+    #[allow(clippy::only_used_in_recursion)]
     fn types_compatible(&self, actual: &SorobanType, expected: &SorobanType) -> bool {
         match (actual, expected) {
             // Exact match

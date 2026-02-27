@@ -7,6 +7,7 @@ use super::types::*;
 use std::collections::HashSet;
 
 /// TypeScript binding generator
+#[allow(dead_code)]
 pub struct TypeScriptGenerator {
     indent: String,
 }
@@ -65,6 +66,7 @@ impl TypeScriptGenerator {
         types
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_types_recursive(&self, soroban_type: &SorobanType, types: &mut HashSet<String>) {
         match soroban_type {
             SorobanType::Custom { name } => {
@@ -274,6 +276,7 @@ impl TypeScriptGenerator {
     }
 
     /// Convert Soroban type to TypeScript type
+    #[allow(clippy::only_used_in_recursion)]
     fn soroban_to_ts_type(&self, soroban_type: &SorobanType) -> String {
         match soroban_type {
             SorobanType::Bool => "boolean".to_string(),
@@ -337,6 +340,7 @@ impl Default for TypeScriptGenerator {
 }
 
 /// Rust binding generator
+#[allow(dead_code)]
 pub struct RustGenerator {
     indent: String,
 }
@@ -562,6 +566,7 @@ impl RustGenerator {
     }
 
     /// Convert Soroban type to Rust type
+    #[allow(clippy::only_used_in_recursion)]
     fn soroban_to_rust_type(&self, soroban_type: &SorobanType) -> String {
         match soroban_type {
             SorobanType::Bool => "bool".to_string(),
@@ -625,6 +630,7 @@ impl Default for RustGenerator {
 }
 
 /// Generate bindings in the specified language
+#[allow(dead_code)]
 pub fn generate_bindings(abi: &ContractABI, language: BindingLanguage) -> String {
     match language {
         BindingLanguage::TypeScript => TypeScriptGenerator::new().generate(abi),
@@ -634,6 +640,7 @@ pub fn generate_bindings(abi: &ContractABI, language: BindingLanguage) -> String
 
 /// Supported binding languages
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum BindingLanguage {
     TypeScript,
     Rust,

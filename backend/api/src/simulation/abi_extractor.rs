@@ -1,4 +1,3 @@
-use contract_abi::{types::SorobanType, RawContractSpec};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +17,7 @@ pub struct FunctionInfo {
 }
 
 pub fn extract_abi(wasm_bytes: &[u8]) -> AbiExtractionResult {
-    let mut errors = Vec::new();
+    let errors = Vec::new();
     let mut functions = Vec::new();
     let mut types = Vec::new();
 

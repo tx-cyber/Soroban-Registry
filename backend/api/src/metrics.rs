@@ -4,6 +4,7 @@ use prometheus::{
     IntGaugeVec, Registry, TextEncoder,
 };
 
+#[allow(dead_code)]
 pub static REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
 
 macro_rules! counter_vec {
@@ -353,6 +354,7 @@ pub fn gather_metrics(r: &Registry) -> String {
     String::from_utf8(buf).unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub fn observe_http(method: &str, path: &str, status: u16, duration_secs: f64) {
     HTTP_REQUESTS_TOTAL
         .with_label_values(&[method, path, &status.to_string()])
@@ -362,6 +364,7 @@ pub fn observe_http(method: &str, path: &str, status: u16, duration_secs: f64) {
         .observe(duration_secs);
 }
 
+#[allow(dead_code)]
 pub fn observe_verification_latency(result: &str, duration_secs: f64) {
     VERIFICATION_LATENCY
         .with_label_values(&[result])
@@ -372,12 +375,14 @@ pub fn observe_verification_latency(result: &str, duration_secs: f64) {
     }
 }
 
+#[allow(dead_code)]
 pub fn set_contracts_per_publisher(publisher: &str, count: i64) {
     CONTRACTS_PER_PUBLISHER
         .with_label_values(&[publisher])
         .set(count);
 }
 
+#[allow(dead_code)]
 pub fn observe_db_query(query: &str, duration_secs: f64) {
     DB_QUERY_DURATION
         .with_label_values(&[query])

@@ -237,6 +237,7 @@ fn operation_from_function(
 
 struct SchemaGenerator {
     schemas: BTreeMap<String, Schema>,
+    #[allow(dead_code)]
     next_id: usize,
 }
 

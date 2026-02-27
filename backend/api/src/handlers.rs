@@ -45,6 +45,7 @@ pub(crate) fn db_internal_error(operation: &str, err: sqlx::Error) -> ApiError {
     ApiError::internal("An unexpected database error occurred")
 }
 
+#[allow(dead_code)]
 fn map_json_rejection(err: JsonRejection) -> ApiError {
     ApiError::bad_request(
         "InvalidRequest",
@@ -61,6 +62,7 @@ fn map_query_rejection(err: QueryRejection) -> ApiError {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, sqlx::Type)]
 #[sqlx(type_name = "contract_audit_event_type", rename_all = "snake_case")]
+#[allow(dead_code)]
 pub enum ContractAuditEventType {
     ContractCreated,
     MetadataUpdated,
@@ -70,6 +72,7 @@ pub enum ContractAuditEventType {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct ContractAuditLogEntry {
     pub id: Uuid,
     pub event_type: ContractAuditEventType,

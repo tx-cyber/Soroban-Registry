@@ -1,11 +1,7 @@
-use crate::error::ApiError;
 use anyhow::Result;
-use shared::{
-    ContractDependency, DependencyDeclaration, DependencyTreeNode, GraphEdge, GraphNode,
-    GraphResponse,
-};
+use shared::{DependencyDeclaration, GraphEdge, GraphNode, GraphResponse};
 use sqlx::PgPool;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use uuid::Uuid;
 
 /// Detect dependencies from a contract ABI JSON

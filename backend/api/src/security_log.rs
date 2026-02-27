@@ -100,7 +100,7 @@ impl SecurityEvent {
 
     /// Log the security event using the structured logging system
     pub fn log(self) {
-        let event_json = serde_json::to_string(&self).unwrap_or_else(|_| "{}".to_string());
+        let _event_json = serde_json::to_string(&self).unwrap_or_else(|_| "{}".to_string());
 
         match self.event_type.as_str() {
             "validation_failed" => {

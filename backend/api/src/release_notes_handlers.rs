@@ -463,7 +463,7 @@ async fn build_diff_summary(
 async fn build_initial_diff_summary(
     state: &AppState,
     contract_uuid: Uuid,
-    contract_id: &str,
+    _contract_id: &str,
     version: &str,
 ) -> ApiResult<DiffSummary> {
     let abi: Option<serde_json::Value> =

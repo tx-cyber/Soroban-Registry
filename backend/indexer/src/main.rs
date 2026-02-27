@@ -73,14 +73,17 @@ impl IndexerService {
 
     /// Flush the current state to the database before shutdown
     async fn flush_state(&self) -> Result<()> {
-        if let Ok(state_guard) = self.current_state.lock() {
-            if let Some(state) = state_guard.as_ref() {
-                info!(
-                    "Flushing indexer state to database before shutdown: ledger={}",
-                    state.last_indexed_ledger_height
-                );
-                self.state_manager.update_state(state).await?;
-            }
+        let state_clone = self
+            .current_state
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
+        if let Some(state) = state_clone {
+            info!(
+                "Flushing indexer state to database before shutdown: ledger={}",
+                state.last_indexed_ledger_height
+            );
+            self.state_manager.update_state(&state).await?;
         }
         Ok(())
     }

@@ -9,15 +9,10 @@ use shared::models::{
 };
 use std::time::Instant;
 
-use crate::{
-    error::{ApiError, ApiResult},
-    simulation,
-    state::AppState,
-    validation::validate_contract_id,
-};
+use crate::{error::ApiResult, simulation, state::AppState, validation::validate_contract_id};
 
 pub async fn simulate_deploy(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(req): Json<SimulateDeployRequest>,
 ) -> ApiResult<impl IntoResponse> {
     let start_time = Instant::now();
@@ -56,7 +51,7 @@ pub async fn simulate_deploy(
     };
 
     let wasm_bytes = wasm_binary.as_slice();
-    let wasm_size_kb = wasm_bytes.len() as f64 / 1024.0;
+    let _wasm_size_kb = wasm_bytes.len() as f64 / 1024.0;
 
     if wasm_bytes.is_empty() {
         return Ok(Json(SimulationResult {

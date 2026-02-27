@@ -9,8 +9,8 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use shared::{
     ChainOfCustodyEntry, ChainOfCustodyResponse, PackageSignature, RevokeSignatureRequest,
-    SignPackageRequest, SignatureStatus, TransparencyEntryType, TransparencyLogEntry,
-    TransparencyLogQueryParams, VerifySignatureRequest, VerifySignatureResponse,
+    SignatureStatus, TransparencyEntryType, TransparencyLogEntry, TransparencyLogQueryParams,
+    VerifySignatureResponse,
 };
 use uuid::Uuid;
 
@@ -455,19 +455,19 @@ pub async fn get_transparency_log(
         None
     };
 
-    if let Some(et) = &query.entry_type {
+    if let Some(_et) = &query.entry_type {
         conditions.push(format!("entry_type = ${}", param_count));
         param_count += 1;
     }
-    if let Some(addr) = &query.actor_address {
+    if let Some(_addr) = &query.actor_address {
         conditions.push(format!("actor_address = ${}", param_count));
         param_count += 1;
     }
-    if let Some(from) = &query.from_timestamp {
+    if let Some(_from) = &query.from_timestamp {
         conditions.push(format!("timestamp >= ${}", param_count));
         param_count += 1;
     }
-    if let Some(to) = &query.to_timestamp {
+    if let Some(_to) = &query.to_timestamp {
         conditions.push(format!("timestamp <= ${}", param_count));
         param_count += 1;
     }

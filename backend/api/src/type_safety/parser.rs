@@ -86,6 +86,7 @@ impl ParseError {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_context(mut self, context: impl Into<String>) -> Self {
         self.context = Some(context.into());
         self
@@ -324,6 +325,7 @@ pub fn parse_json_spec(json: &str, contract_name: &str) -> Result<ContractABI, P
 }
 
 /// Parse value string into ParsedValue based on expected type
+#[allow(dead_code)]
 pub fn parse_value_string(
     value: &str,
     expected_type: &SorobanType,

@@ -3,7 +3,6 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{

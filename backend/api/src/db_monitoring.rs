@@ -61,6 +61,7 @@ pub fn spawn_db_monitoring_task(pool: PgPool, cache: Arc<CacheLayer>) {
 }
 
 /// Helper to acquire a connection with latency tracking and slow acquisition logging
+#[allow(dead_code)]
 pub async fn acquire_with_metrics(
     pool: &PgPool,
 ) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, sqlx::Error> {

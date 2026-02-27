@@ -148,7 +148,7 @@ pub async fn send_notification(
 }
 
 pub async fn get_user_notifications(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // In a real system, this would return user-specific notifications

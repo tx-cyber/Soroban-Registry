@@ -99,7 +99,7 @@ pub fn diff_abi(old: &ContractABI, new: &ContractABI) -> Vec<BreakingChange> {
     let new_funcs: HashMap<&str, &ContractFunction> =
         new.functions.iter().map(|f| (f.name.as_str(), f)).collect();
 
-    for (name, func) in &old_funcs {
+    for name in old_funcs.keys() {
         if !new_funcs.contains_key(name) {
             changes.push(BreakingChange {
                 severity: ChangeSeverity::Breaking,
