@@ -20,21 +20,25 @@ pub struct AppState {
     pub health_monitor_status: HealthMonitorStatus,
     pub auth_mgr: Arc<RwLock<AuthManager>>,
     pub resource_mgr: Arc<RwLock<ResourceManager>>,
+    pub source_storage: Arc<shared::source_storage::SourceStorage>,
 }
 
 impl AppState {
-    pub fn new(
+    pub async fn new(
         db: PgPool,
         registry: Registry,
         job_engine: Arc<soroban_batch::engine::JobEngine>,
         is_shutting_down: Arc<AtomicBool>,
-    ) -> Self {
+    ) -> Result<Self, crate::shared::error::RegistryError> {
         let config = CacheConfig::from_env();
         let auth_mgr = Arc::new(RwLock::new(
             AuthManager::from_env().expect("JWT config validated at startup"),
         ));
         let resource_mgr = Arc::new(RwLock::new(ResourceManager::new()));
-        Self {
+
+        let source_storage = Arc::new(shared::source_storage::SourceStorage::new().await?);
+
+        Ok(Self {
             db,
             started_at: Instant::now(),
             cache: Arc::new(CacheLayer::new(config)),
@@ -44,6 +48,7 @@ impl AppState {
             health_monitor_status: HealthMonitorStatus::default(),
             auth_mgr,
             resource_mgr,
-        }
+            source_storage,
+        })
     }
 }

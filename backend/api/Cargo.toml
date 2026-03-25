@@ -52,6 +52,7 @@ jsonwebtoken = "9.3.0"
 regex = "1.10"
 lazy_static = "1.4"
 wasmparser = { workspace = true }
+difference = "2.0"
 contract_abi = { path = "../contract_abi" }
 rust_decimal = { workspace = true }
 utoipa = { workspace = true }
