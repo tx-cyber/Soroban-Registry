@@ -1,3 +1,7 @@
+import type { ContractSearchParams } from '@/lib/api';
+
+type NetworkFilter = NonNullable<ContractSearchParams['network']>;
+
 interface FilterPanelProps {
   categories: string[];
   selectedCategories: string[];
@@ -5,6 +9,9 @@ interface FilterPanelProps {
   languages: string[];
   selectedLanguages: string[];
   onToggleLanguage: (value: string) => void;
+  networks: NetworkFilter[];
+  selectedNetworks: NetworkFilter[];
+  onToggleNetwork: (value: NetworkFilter) => void;
   author: string;
   onAuthorChange: (value: string) => void;
   verifiedOnly: boolean;
@@ -64,6 +71,9 @@ export function FilterPanel({
   languages,
   selectedLanguages,
   onToggleLanguage,
+  networks,
+  selectedNetworks,
+  onToggleNetwork,
   author,
   onAuthorChange,
   verifiedOnly,
@@ -86,7 +96,6 @@ export function FilterPanel({
       />
 
       <div>
-        <label className="block text-sm font-medium text-foreground mb-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Network</p>
         <div className="space-y-1.5">
           {networks.map((network) => {

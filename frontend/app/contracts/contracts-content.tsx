@@ -55,6 +55,8 @@ function toggleOne<T>(values: T[], value: T) {
 
 function isAllNetworksSelected(values: NonNullable<ContractSearchParams['network']>[]) {
   return values.length === ALL_NETWORK_FILTERS.length;
+}
+
 function getPaginationRange(
   currentPage: number,
   totalPages: number,
@@ -126,9 +128,8 @@ function getInitialFilters(searchParams: URLSearchParams): ContractsUiFilters {
   const query = searchParams.get('query') || searchParams.get('q') || '';
   const categories = parseCsvOrMulti(searchParams.getAll('category'));
   const languages = parseCsvOrMulti(searchParams.getAll('language'));
-  const parsedNetworks = parseCsvOrMulti(searchParams.getAll('network')).filter(
   const tags = parseCsvOrMulti(searchParams.getAll('tag'));
-  const networks = parseCsvOrMulti(searchParams.getAll('network')).filter(
+  const parsedNetworks = parseCsvOrMulti(searchParams.getAll('network')).filter(
     (network): network is NonNullable<ContractSearchParams['network']> =>
       network === 'mainnet' || network === 'testnet' || network === 'futurenet',
   );
@@ -218,7 +219,6 @@ export function ContractsContent() {
       filters.networks.forEach((network) => params.append('network', network));
     }
     filters.tags.forEach((tag) => params.append('tag', tag));
-    filters.networks.forEach((network) => params.append('network', network));
     if (filters.author) params.set('author', filters.author);
     if (filters.verified_only) params.set('verified_only', 'true');
     if (filters.sort_by) params.set('sort_by', filters.sort_by);
@@ -279,15 +279,17 @@ export function ContractsContent() {
           }
         : data,
     [data, filters.page, filters.page_size, filters.networks.length],
+  );
+
   const { data: stats } = useQuery({
     queryKey: ['stats'],
     queryFn: () => api.getStats(),
   });
 
-  const isEmptyResult = (data?.total ?? 0) === 0;
+  const isEmptyResult = (effectiveData?.total ?? 0) === 0;
   const paginationRange = useMemo(
-    () => (data ? getPaginationRange(filters.page, data.total_pages) : []),
-    [filters.page, data],
+    () => (effectiveData ? getPaginationRange(filters.page, effectiveData.total_pages) : []),
+    [filters.page, effectiveData],
   );
 
   useEffect(() => {
@@ -464,6 +466,15 @@ export function ContractsContent() {
           page: 1,
         }))
       }
+      networks={ALL_NETWORK_FILTERS}
+      selectedNetworks={filters.networks}
+      onToggleNetwork={(value) =>
+        setFilters((current) => ({
+          ...current,
+          networks: toggleOne(current.networks, value),
+          page: 1,
+        }))
+      }
       author={filters.author}
       onAuthorChange={(value) =>
         setFilters((current) => ({ ...current, author: value, page: 1 }))
@@ -599,6 +610,9 @@ export function ContractsContent() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
       </section>
 
       {/* Main content */}
@@ -606,7 +620,10 @@ export function ContractsContent() {
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <ResultsCount visibleCount={data?.items.length ?? 0} totalCount={data?.total ?? 0} />
+            <ResultsCount
+              visibleCount={effectiveData?.items.length ?? 0}
+              totalCount={effectiveData?.total ?? 0}
+            />
             {isFetching && !isLoading && (
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -676,23 +693,24 @@ export function ContractsContent() {
 
           {/* Results grid */}
           <div className="flex-1 min-w-0">
-            {isLoading ? (
+            {!preferencesReady || isLoading ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <ContractCardSkeleton key={i} />
                 ))}
               </div>
-            ) : data && data.items.length > 0 ? (
+            ) : effectiveData && effectiveData.items.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-                  {data.items.map((contract: Contract) => (
+                  {effectiveData.items.map((contract: Contract) => (
                     <ContractCard key={contract.id} contract={contract} />
                   ))}
                 </div>
 
-                {data.total_pages > 1 && (
+                {effectiveData.total_pages > 1 && (
                   <div className="flex flex-wrap items-center justify-center gap-2 py-4">
                     <button
+                      type="button"
                       onClick={() =>
                         setFilters((current) => ({ ...current, page: Math.max(1, current.page - 1) }))
                       }
@@ -724,7 +742,7 @@ export function ContractsContent() {
                           onClick={() =>
                             setFilters((current) => ({
                               ...current,
-                              page: Math.min(data.total_pages, Math.max(1, item)),
+                              page: Math.min(effectiveData.total_pages, Math.max(1, item)),
                             }))
                           }
                           aria-current={isActive ? 'page' : undefined}
@@ -740,10 +758,11 @@ export function ContractsContent() {
                     })}
 
                     <button
+                      type="button"
                       onClick={() =>
                         setFilters((current) => ({ ...current, page: current.page + 1 }))
                       }
-                      disabled={filters.page >= data.total_pages}
+                      disabled={filters.page >= effectiveData.total_pages}
                       className="px-4 py-2 rounded-lg border border-border text-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent transition-colors text-sm font-medium"
                     >
                       Next
@@ -825,80 +844,6 @@ export function ContractsContent() {
           </div>
         </div>
       )}
-
-      {!preferencesReady || isLoading ? (
-        <>
-          <div className="mb-4">
-            <div className="h-6 w-48 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <ContractCardSkeleton key={i} />
-            ))}
-          </div>
-        </>
-      ) : effectiveData && effectiveData.items.length > 0 ? (
-        <>
-          <div className="mb-4">
-            <ResultsCount visibleCount={effectiveData.items.length} totalCount={effectiveData.total} />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {effectiveData.items.map((contract: Contract) => (
-              <ContractCard key={contract.id} contract={contract} />
-            ))}
-          </div>
-
-          {effectiveData.total_pages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() =>
-                  setFilters((current) => ({ ...current, page: Math.max(1, current.page - 1) }))
-                }
-                disabled={filters.page <= 1}
-                className="px-4 py-2 rounded-lg border border-border text-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent transition-colors"
-              >
-                Previous
-              </button>
-
-              <span className="text-sm text-muted-foreground">
-                Page {filters.page} of {effectiveData.total_pages}
-              </span>
-
-              <button
-                onClick={() =>
-                  setFilters((current) => ({ ...current, page: current.page + 1 }))
-                }
-                disabled={filters.page >= effectiveData.total_pages}
-                className="px-4 py-2 rounded-lg border border-border text-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent transition-colors"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="text-center py-12 bg-background rounded-xl border border-border shadow-sm">
-          <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground mb-4">
-            No contracts found for the selected filters
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              logEvent('search_performed', {
-                keyword: '',
-                action: 'clear_all_filters',
-              });
-              clearAllFilters();
-            }}
-            className="px-4 py-2 rounded-lg border border-border text-foreground hover:bg-accent transition-colors"
-          >
-            Clear all filters
-          </button>
-        </div>
-      )}
-    </div>
     </>
   );
 }
