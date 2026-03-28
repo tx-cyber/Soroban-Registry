@@ -1119,7 +1119,7 @@ pub async fn get_contract_search_suggestions(
 )]
 pub async fn list_contracts(
     State(state): State<AppState>,
-    claims: Option<shared::AuthClaims>,
+    claims: Option<crate::auth::AuthClaims>,
     params: Result<Query<ContractSearchParams>, QueryRejection>,
 ) -> axum::response::Response {
     let search_started_at = std::time::Instant::now();
