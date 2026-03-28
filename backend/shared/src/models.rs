@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -10,6 +11,20 @@ use uuid::Uuid;
 
 /// Represents a smart contract in the registry
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, utoipa::ToSchema)]
+#[schema(example = json!({
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "contract_id": "C...1234",
+    "wasm_hash": "a1b2c3d4...",
+    "name": "YieldOptimizer",
+    "description": "Optimizes yield across protocols",
+    "publisher_id": "550e8400-e29b-41d4-a716-446655440001",
+    "network": "mainnet",
+    "is_verified": true,
+    "category": "DeFi",
+    "tags": ["yield", "optimization"],
+    "created_at": "2023-10-27T10:00:00Z",
+    "updated_at": "2023-10-27T10:00:00Z"
+}))]
 pub struct Contract {
     pub id: Uuid,
     pub contract_id: String,
@@ -295,6 +310,15 @@ pub enum MaturityLevel {
 
 /// Publisher/developer information
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, utoipa::ToSchema)]
+#[schema(example = json!({
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "stellar_address": "GABC...",
+    "username": "SorobanDev",
+    "email": "dev@soroban.io",
+    "github_url": "https://github.com/sorobandev",
+    "website": "https://soroban.io",
+    "created_at": "2023-10-27T10:00:00Z"
+}))]
 pub struct Publisher {
     pub id: Uuid,
     pub stellar_address: String,
@@ -2339,7 +2363,7 @@ pub struct ReleaseNotesResponse {
 // Contract changelog (release history)
 // ────────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ContractChangelogEntry {
     pub version: String,
     pub created_at: DateTime<Utc>,
@@ -2354,7 +2378,7 @@ pub struct ContractChangelogEntry {
     pub breaking_changes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ContractChangelogResponse {
     pub contract_id: Uuid,
     pub entries: Vec<ContractChangelogEntry>,
