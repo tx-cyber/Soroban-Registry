@@ -1119,7 +1119,7 @@ pub async fn get_contract_search_suggestions(
 )]
 pub async fn list_contracts(
     State(state): State<AppState>,
-    claims: Option<crate::auth::AuthClaims>,
+    claims: Option<shared::AuthClaims>,
     params: Result<Query<ContractSearchParams>, QueryRejection>,
 ) -> axum::response::Response {
     let search_started_at = std::time::Instant::now();
@@ -1466,7 +1466,7 @@ pub async fn list_contracts(
 )]
 pub async fn get_contract(
     State(state): State<AppState>,
-    claims: Option<crate::auth::AuthClaims>,
+    claims: Option<shared::AuthClaims>,
     Path(id): Path<String>,
     Query(query): Query<GetContractQuery>,
 ) -> ApiResult<Json<ContractGetResponse>> {
@@ -1493,7 +1493,7 @@ pub async fn get_contract(
     if contract.visibility == shared::VisibilityType::Private {
         let is_member = if let Some(ref claims) = claims {
             if let Some(org_id) = contract.organization_id {
-                crate::org_handlers::check_org_role(&state.db, org_id, &claims.sub, shared::OrganizationRole::Viewer)
+                crate::org_handlers::check_org_role(&state.pool, org_id, &claims.sub, shared::OrganizationRole::Viewer)
                     .await
                     .is_ok()
             } else {

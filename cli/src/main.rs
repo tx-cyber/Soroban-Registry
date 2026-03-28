@@ -4,6 +4,7 @@ mod backup;
 mod batch_verify;
 mod commands;
 mod config;
+mod contracts;
 mod conversions;
 mod coverage;
 mod dashboard;
@@ -611,6 +612,49 @@ pub enum ConfigSubcommands {
         version: i32,
         #[arg(long)]
         created_by: String,
+    },
+}
+
+/// Sub-commands for the `contracts` group
+#[derive(Debug, Subcommand)]
+pub enum ContractsCommands {
+    /// List contracts with filtering and pagination
+    List {
+        /// Filter by network (mainnet, testnet, futurenet)
+        #[arg(long)]
+        network: Option<String>,
+
+        /// Filter by category (e.g., DEX, token, lending, oracle)
+        #[arg(long)]
+        category: Option<String>,
+
+        /// Maximum number of contracts to return
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Number of contracts to skip (for pagination)
+        #[arg(long, default_value = "0")]
+        offset: usize,
+
+        /// Sort by field: name, created_at, health_score, network
+        #[arg(long, default_value = "created_at")]
+        sort_by: String,
+
+        /// Sort order: asc or desc
+        #[arg(long, default_value = "desc")]
+        sort_order: String,
+
+        /// Output format: table, json, or csv
+        #[arg(long, default_value = "table")]
+        format: String,
+
+        /// Output results as JSON (shorthand for --format json)
+        #[arg(long)]
+        json: bool,
+
+        /// Output results as CSV (shorthand for --format csv)
+        #[arg(long)]
+        csv: bool,
     },
 }
 
