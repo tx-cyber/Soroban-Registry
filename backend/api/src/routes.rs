@@ -210,6 +210,10 @@ pub fn contract_routes() -> Router<AppState> {
             post(compatibility_testing_handlers::mark_notifications_read),
         )
         .route(
+            "/api/contracts/:id/deployments",
+            get(handlers::get_contract_deployments),
+        )
+        .route(
             "/api/contracts/:id/deployments/status",
             get(handlers::get_deployment_status),
         )
@@ -227,6 +231,27 @@ pub fn contract_routes() -> Router<AppState> {
             post(simulation_handlers::simulate_deploy),
         )
         .merge(favorite_routes())
+}
+
+pub fn organization_routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/organizations", post(org_handlers::create_organization))
+        .route(
+            "/api/organizations/:id",
+            get(org_handlers::get_organization).patch(org_handlers::update_organization),
+        )
+        .route(
+            "/api/organizations/:id/members",
+            get(org_handlers::list_org_members),
+        )
+        .route(
+            "/api/organizations/:id/invitations",
+            post(org_handlers::invite_member),
+        )
+        .route(
+            "/api/organizations/invitations/:token/accept",
+            post(org_handlers::accept_invitation),
+        )
 }
 
 #[cfg(not(feature = "openapi"))]

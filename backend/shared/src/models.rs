@@ -38,6 +38,24 @@ pub struct Contract {
     /// Search relevance score (calculated at runtime)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relevance_score: Option<f64>,
+    /// Organization that owns this contract (for private registries)
+    pub organization_id: Option<Uuid>,
+    /// Visibility level
+    pub visibility: VisibilityType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema, PartialEq)]
+#[sqlx(type_name = "visibility_type", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum VisibilityType {
+    Public,
+    Private,
+}
+
+impl Default for VisibilityType {
+    fn default() -> Self {
+        Self::Public
+    }
 }
 
 /// Response for GET /contracts/:id with optional network-specific slice (Issue #43)

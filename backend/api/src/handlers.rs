@@ -1119,6 +1119,7 @@ pub async fn get_contract_search_suggestions(
 )]
 pub async fn list_contracts(
     State(state): State<AppState>,
+    claims: Option<shared::AuthClaims>,
     params: Result<Query<ContractSearchParams>, QueryRejection>,
 ) -> axum::response::Response {
     let search_started_at = std::time::Instant::now();
@@ -1201,6 +1202,38 @@ pub async fn list_contracts(
     query.push_str("        c.*, \n");
     
     if let Some(ref q) = params.query {
+        // Clean query for tsquery
+        let cleaned_q = q.replace('\'', "''");
+        query.push_str(&format!(
+            "        ts_rank_cd(c.search_vector, plainto_tsquery('english', '{}')) as text_relevance,\n",
+            cleaned_q
+        ));
+    } else {
+        query.push_str("        0.0 as text_relevance,\n");
+    }
+
+    query.push_str(&format!(
+        "        LOG(1 + cs.interaction_count + 2 * cs.deployment_count) as popularity_score,
+        1.0 / (1.0 + EXTRACT(DAYS FROM (NOW() - c.updated_at)) / 30.0) as recency_score,
+        (cs.avg_rating / 5.0) * LOG(1.0 + cs.review_count) as rating_score,
+        LOG(1 + cs.user_interaction_count) as personal_boost
+    FROM contracts c
+    JOIN contract_stats cs ON c.id = cs.id
+    WHERE (c.visibility = 'public'"
+    ));
+
+    let mut count_query = String::from("SELECT COUNT(*) FROM contracts c WHERE (c.visibility = 'public'");
+
+    if let Some(claims) = claims {
+        let visibility_clause = format!(
+            " OR (c.visibility = 'private' AND c.organization_id IN (SELECT organization_id FROM organization_members om JOIN publishers p ON om.publisher_id = p.id WHERE p.stellar_address = '{}'))",
+            claims.sub.replace('\'', "''")
+        );
+        query.push_str(&visibility_clause);
+        count_query.push_str(&visibility_clause);
+    }
+    query.push_str(")");
+    count_query.push_str(")");
         query.push(" AND contracts_build_tsquery(");
         query.push_bind(q);
         query.push(") @@ c.search_document");
@@ -1433,6 +1466,7 @@ pub async fn list_contracts(
 )]
 pub async fn get_contract(
     State(state): State<AppState>,
+    claims: Option<shared::AuthClaims>,
     Path(id): Path<String>,
     Query(query): Query<GetContractQuery>,
 ) -> ApiResult<Json<ContractGetResponse>> {
@@ -1454,6 +1488,28 @@ pub async fn get_contract(
             ),
             _ => db_internal_error("get contract by id", err),
         })?;
+
+    // Visibility check
+    if contract.visibility == shared::VisibilityType::Private {
+        let is_member = if let Some(ref claims) = claims {
+            if let Some(org_id) = contract.organization_id {
+                crate::org_handlers::check_org_role(&state.pool, org_id, &claims.sub, shared::OrganizationRole::Viewer)
+                    .await
+                    .is_ok()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !is_member {
+            return Err(ApiError::forbidden(
+                "AccessDenied",
+                "This contract is private and you do not have access to it",
+            ));
+        }
+    }
 
     let current_network = query.network;
     let network_config = if let Some(ref net) = current_network {
@@ -3984,6 +4040,40 @@ pub async fn get_all_audit_logs(
     ),
     tag = "Deployments"
 )]
+#[utoipa::path(
+    get,
+    path = "/api/contracts/{id}/deployments",
+    params(
+        ("id" = String, Path, description = "Contract UUID")
+    ),
+    responses(
+        (status = 200, description = "List of contract deployments", body = [ContractDeployment]),
+        (status = 404, description = "Contract not found")
+    ),
+    tag = "Deployments"
+)]
+pub async fn get_contract_deployments(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Vec<ContractDeployment>>> {
+    let contract_uuid = Uuid::parse_str(&id).map_err(|_| {
+        ApiError::bad_request(
+            "InvalidContractId",
+            format!("Invalid contract ID format: {}", id),
+        )
+    })?;
+
+    let deployments: Vec<ContractDeployment> = sqlx::query_as(
+        "SELECT * FROM contract_deployments WHERE contract_id = $1 ORDER BY deployed_at DESC",
+    )
+    .bind(contract_uuid)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|err| db_internal_error("get contract deployments", err))?;
+
+    Ok(Json(deployments))
+}
+
 pub async fn get_deployment_status() -> impl IntoResponse {
     planned_not_implemented_response()
 }
