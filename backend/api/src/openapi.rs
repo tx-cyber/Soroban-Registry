@@ -60,6 +60,13 @@ use utoipa::OpenApi;
         deprecation_handlers::get_deprecation_info,
         deprecation_handlers::deprecate_contract,
         metrics_handler::metrics_endpoint,
+        // Review system
+        handlers::reviews::get_reviews,
+        handlers::reviews::create_review,
+        handlers::reviews::vote_review,
+        handlers::reviews::flag_review,
+        handlers::reviews::moderate_review,
+        handlers::reviews::get_rating_stats,
     ),
     components(
         schemas(
@@ -98,7 +105,6 @@ use utoipa::OpenApi;
             ContractInteraction,
             ContractDependency,
             ImpactAnalysisResponse,
-            VerifyRequest,
             ContractAnalyticsResponse,
             DeploymentStats,
             InteractorStats,
@@ -133,6 +139,17 @@ use utoipa::OpenApi;
             custom_metrics_handlers::MetricSampleResponse,
             custom_metrics_handlers::MetricSample,
             custom_metrics_handlers::MetricCatalogEntry,
+            // Review system
+            ReviewResponse,
+            ReviewStatus,
+            ReviewSortBy,
+            CreateReviewRequest,
+            ReviewVoteRequest,
+            ReviewVoteResponse,
+            FlagReviewRequest,
+            ModerateReviewRequest,
+            ContractRatingStats,
+            RatingDistribution,
         )
     ),
     tags(
@@ -151,6 +168,7 @@ use utoipa::OpenApi;
         (name = "Deployments", description = "Deployment management"),
         (name = "Versions", description = "Contract version history and management"),
         (name = "Security", description = "Security and trust score assessments"),
+        (name = "Reviews", description = "Contract reviews and ratings"),
     ),
     modifiers(&SecurityAddon)
 )]

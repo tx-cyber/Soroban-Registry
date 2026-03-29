@@ -1,10 +1,9 @@
 use crate::auth::AuthManager;
 use crate::cache::{CacheConfig, CacheLayer};
-use crate::contract_events::ContractEventHub;
 use crate::health_monitor::HealthMonitorStatus;
 use crate::resource_tracking::ResourceManager;
 use prometheus::Registry;
-use shared::source_storage::SourceStorage;
+use shared::error::RegistryError;
 use sqlx::PgPool;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
@@ -50,6 +49,7 @@ pub struct AppState {
     pub resource_mgr: Arc<RwLock<ResourceManager>>,
     pub source_storage: Arc<SourceStorage>,
     pub event_broadcaster: broadcast::Sender<RealtimeEvent>,
+    pub contract_events: Arc<ContractEventHub>,
 }
 
 impl AppState {

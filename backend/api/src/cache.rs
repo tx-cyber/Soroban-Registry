@@ -54,16 +54,13 @@ impl CacheConfig {
     }
 }
 
-use redis::aio::ConnectionManager;
-use redis::AsyncCommands;
-
 pub struct CacheLayer {
     pub abi_cache: MokaCache<String, String>,
     pub verification_cache: MokaCache<String, String>,
     pub generic_cache: MokaCache<String, String>,
     pub contract_access_cache: MokaCache<String, bool>,
-    redis_cm: Option<ConnectionManager>,
-    config: CacheConfig,
+    pub config: CacheConfig,
+    pub redis_cm: Option<ConnectionManager>,
 }
 
 impl CacheLayer {
@@ -95,18 +92,22 @@ impl CacheLayer {
             .time_to_live(Duration::from_secs(60))
             .build();
 
-        let redis_cm = if config.enabled && config.redis_enabled {
-            if let Some(url) = config.redis_url.clone() {
-                match redis::Client::open(url.as_str()) {
+        // Initialize Redis connection manager if Redis is enabled
+        let redis_cm = if config.redis_enabled {
+            if let Some(redis_url) = &config.redis_url {
+                match redis::Client::open(redis_url.as_str()) {
                     Ok(client) => match ConnectionManager::new(client).await {
-                        Ok(manager) => Some(manager),
-                        Err(err) => {
-                            tracing::warn!(error = ?err, "redis connection manager disabled due to init error");
+                        Ok(cm) => {
+                            tracing::info!("Redis connection manager initialized");
+                            Some(cm)
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to create Redis connection manager: {}", e);
                             None
                         }
                     },
-                    Err(err) => {
-                        tracing::warn!(error = ?err, "redis client disabled due to invalid configuration");
+                    Err(e) => {
+                        tracing::warn!("Failed to create Redis client: {}", e);
                         None
                     }
                 }
@@ -124,6 +125,7 @@ impl CacheLayer {
             contract_access_cache,
             redis_cm,
             config,
+            redis_cm,
         }
     }
 
@@ -145,28 +147,6 @@ impl CacheLayer {
             return Some(abi);
         }
 
-        // Check L2 cache (Redis)
-        if let Some(mut cm) = self.redis_cm.clone() {
-            let key = format!("abi:{}", contract_id);
-            match cm.get::<String, Option<String>>(key).await {
-                Ok(Some(abi)) => {
-                    crate::metrics::REDIS_CACHE_HITS.inc();
-                    // Back-fill L1 cache
-                    self.abi_cache
-                        .insert(contract_id.to_string(), abi.clone())
-                        .await;
-                    return Some(abi);
-                }
-                Ok(None) => {
-                    crate::metrics::REDIS_CACHE_MISSES.inc();
-                }
-                Err(e) => {
-                    tracing::error!("Redis get error: {}", e);
-                    crate::metrics::REDIS_CACHE_MISSES.inc();
-                }
-            }
-        }
-
         crate::metrics::ABI_CACHE_MISSES.inc();
         None
     }
@@ -176,17 +156,10 @@ impl CacheLayer {
             return;
         }
 
-        // Put to L1
+        // Put to L1 cache
         self.abi_cache
-            .insert(contract_id.to_string(), abi.clone())
+            .insert(contract_id.to_string(), abi)
             .await;
-
-        // Put to L2
-        if let Some(mut cm) = self.redis_cm.clone() {
-            let key = format!("abi:{}", contract_id);
-            let _: redis::RedisResult<()> =
-                cm.set_ex::<String, String, ()>(key, abi, 24 * 3600).await;
-        }
     }
 
     pub async fn invalidate_abi(&self, contract_id: &str) {
@@ -194,14 +167,8 @@ impl CacheLayer {
             return;
         }
 
-        // Invalidate L1
+        // Invalidate cache entry
         self.abi_cache.invalidate(contract_id).await;
-
-        // Invalidate L2
-        if let Some(mut cm) = self.redis_cm.clone() {
-            let key = format!("abi:{}", contract_id);
-            let _: redis::RedisResult<()> = cm.del::<String, ()>(key).await;
-        }
     }
 
     pub async fn get_verification(&self, bytecode_hash: &str) -> Option<String> {
@@ -488,7 +455,9 @@ mod tests {
         let cache = CacheLayer::new(CacheConfig {
             enabled: true,
             max_capacity: 100,
-        });
+            redis_enabled: false,
+            redis_url: None,
+        }).await;
 
         assert!(cache.should_refresh_contract_access("contract-1").await);
         assert!(!cache.should_refresh_contract_access("contract-1").await);
