@@ -1,3 +1,18 @@
+mod aggregation;
+mod analytics;
+mod audit_handlers;
+mod audit_routes;
+mod benchmark_engine;
+mod benchmark_handlers;
+mod benchmark_routes;
+mod checklist;
+mod detector;
+mod error;
+mod handlers;
+mod incident_handlers;
+mod incident_routes;
+mod models;
+mod rate_limit;
 #![warn(unused_imports)]
 
 mod ab_test_handlers;
@@ -52,6 +67,7 @@ mod similarity_handlers;
 mod simulation;
 mod simulation_handlers;
 mod state;
+
 mod type_safety;
 mod validation;
 mod websocket;
@@ -243,6 +259,8 @@ async fn main() -> Result<()> {
         .merge(routes::contract_routes())
         .merge(routes::publisher_routes())
         .merge(routes::health_routes())
+        .merge(routes::migration_routes())
+        .merge(incident_routes::incident_routes())
         .merge(routes::network_routes())
         .merge(routes::openapi_routes())
         .merge(routes::health_monitor_routes())
