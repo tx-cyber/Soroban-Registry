@@ -11,7 +11,7 @@ export function useRealtime() {
     isConnected: false,
     unreadCount: 0,
     notifications: [],
-    subscribe: (_eventType: string, _handler: (event: unknown) => void) => () => {},
+    subscribe: () => () => {},
     clearNotifications: () => {},
     markAsRead: () => {},
   };
