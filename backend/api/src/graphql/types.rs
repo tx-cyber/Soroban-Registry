@@ -1,4 +1,6 @@
-use async_graphql::{dataloader::DataLoader, Context, Enum, Error, Object, Result, SimpleObject, Union};
+use async_graphql::{
+    dataloader::DataLoader, Context, Enum, Error, Object, Result, SimpleObject, Union,
+};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde_json::Value;
@@ -77,8 +79,7 @@ impl ContractType {
 
     /// Resolve the publisher for this contract (uses DataLoader to avoid N+1)
     async fn publisher(&self, ctx: &Context<'_>) -> Result<PublisherType> {
-        let loader =
-            ctx.data_unchecked::<DataLoader<crate::graphql::loaders::PublisherLoader>>();
+        let loader = ctx.data_unchecked::<DataLoader<crate::graphql::loaders::PublisherLoader>>();
         let publisher = loader
             .load_one(self.publisher_id)
             .await?
@@ -128,7 +129,11 @@ impl ContractType {
     }
 
     /// Fetch recent metadata/status interactions
-    async fn interactions(&self, ctx: &Context<'_>, limit: Option<i64>) -> Result<Vec<InteractionType>> {
+    async fn interactions(
+        &self,
+        ctx: &Context<'_>,
+        limit: Option<i64>,
+    ) -> Result<Vec<InteractionType>> {
         let state = ctx.data::<AppState>()?;
         let interactions: Vec<ContractInteraction> = sqlx::query_as(
             "SELECT * FROM contract_interactions WHERE contract_id = $1 ORDER BY created_at DESC LIMIT $2",
@@ -137,13 +142,17 @@ impl ContractType {
         .bind(limit.unwrap_or(50))
         .fetch_all(&state.db)
         .await?;
-        Ok(interactions.into_iter().map(InteractionType::from).collect())
+        Ok(interactions
+            .into_iter()
+            .map(InteractionType::from)
+            .collect())
     }
 
     /// Get aggregated performance summary (benchmarks, trends, etc.)
     async fn performance(&self, ctx: &Context<'_>) -> Result<PerformanceSummaryType> {
         let state = ctx.data::<AppState>()?;
-        let summary = crate::performance_handlers::build_performance_summary_internal(state, self.id).await?;
+        let summary =
+            crate::performance_handlers::build_performance_summary_internal(state, self.id).await?;
         Ok(PerformanceSummaryType::from(summary))
     }
 
@@ -154,8 +163,9 @@ impl ContractType {
         // For simplicity and to avoid circular deps if they occur, we assume it's exposed or we use similar logic.
         // Actually, let's just use the logic from dependency_handlers by making it accessible or duplicating logic for the resolver.
         // Given we are in the same crate, we can just call the logic.
-        
-        let response = crate::dependency_handlers::get_contract_dependencies_internal(state, self.id).await?;
+
+        let response =
+            crate::dependency_handlers::get_contract_dependencies_internal(state, self.id).await?;
         Ok(DependencyResponseType::from(response))
     }
 }
@@ -258,8 +268,7 @@ impl ContractVersionType {
 
     /// Resolve the parent contract via DataLoader
     async fn contract(&self, ctx: &Context<'_>) -> Result<ContractType> {
-        let loader =
-            ctx.data_unchecked::<DataLoader<crate::graphql::loaders::DbLoader>>();
+        let loader = ctx.data_unchecked::<DataLoader<crate::graphql::loaders::DbLoader>>();
         let contract = loader
             .load_one(self.contract_id)
             .await?
@@ -432,17 +441,32 @@ pub struct CategoryType {
 
 #[Object]
 impl CategoryType {
-    async fn id(&self) -> Uuid { self.id }
-    async fn name(&self) -> &str { &self.name }
-    async fn slug(&self) -> &str { &self.slug }
-    async fn description(&self) -> Option<&str> { self.description.as_deref() }
-    async fn is_default(&self) -> bool { self.is_default }
-    async fn usage_count(&self) -> i64 { self.usage_count }
-    async fn created_at(&self) -> DateTime<Utc> { self.created_at }
+    async fn id(&self) -> Uuid {
+        self.id
+    }
+    async fn name(&self) -> &str {
+        &self.name
+    }
+    async fn slug(&self) -> &str {
+        &self.slug
+    }
+    async fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    async fn is_default(&self) -> bool {
+        self.is_default
+    }
+    async fn usage_count(&self) -> i64 {
+        self.usage_count
+    }
+    async fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
 
     async fn parent(&self, ctx: &Context<'_>) -> Result<Option<CategoryType>> {
         if let Some(pid) = self.parent_id {
-            let loader = ctx.data_unchecked::<DataLoader<crate::graphql::loaders::CategoryLoader>>();
+            let loader =
+                ctx.data_unchecked::<DataLoader<crate::graphql::loaders::CategoryLoader>>();
             let row = loader.load_one(pid).await?;
             Ok(row.map(CategoryType::from))
         } else {
@@ -533,11 +557,31 @@ pub struct PerformanceSummaryType {
 impl From<ContractPerformanceSummaryResponse> for PerformanceSummaryType {
     fn from(s: ContractPerformanceSummaryResponse) -> Self {
         Self {
-            latest_benchmarks: s.latest_benchmarks.into_iter().map(PerformanceBenchmarkType::from).collect(),
-            metric_snapshots: s.metric_snapshots.into_iter().map(PerformanceMetricSnapshotType::from).collect(),
-            trends: s.trends.into_iter().map(PerformanceTrendPointType::from).collect(),
-            regressions: s.regressions.into_iter().map(PerformanceRegressionType::from).collect(),
-            unresolved_alerts: s.unresolved_alerts.into_iter().map(PerformanceAlertType::from).collect(),
+            latest_benchmarks: s
+                .latest_benchmarks
+                .into_iter()
+                .map(PerformanceBenchmarkType::from)
+                .collect(),
+            metric_snapshots: s
+                .metric_snapshots
+                .into_iter()
+                .map(PerformanceMetricSnapshotType::from)
+                .collect(),
+            trends: s
+                .trends
+                .into_iter()
+                .map(PerformanceTrendPointType::from)
+                .collect(),
+            regressions: s
+                .regressions
+                .into_iter()
+                .map(PerformanceRegressionType::from)
+                .collect(),
+            unresolved_alerts: s
+                .unresolved_alerts
+                .into_iter()
+                .map(PerformanceAlertType::from)
+                .collect(),
         }
     }
 }
@@ -678,7 +722,11 @@ impl From<DependencyNode> for DependencyNodeType {
             name: n.name,
             status: n.status,
             is_circular: n.is_circular,
-            dependencies: n.dependencies.into_iter().map(DependencyNodeType::from).collect(),
+            dependencies: n
+                .dependencies
+                .into_iter()
+                .map(DependencyNodeType::from)
+                .collect(),
         }
     }
 }

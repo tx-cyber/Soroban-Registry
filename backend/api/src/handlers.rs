@@ -108,7 +108,6 @@ pub struct ContractSource {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-
 #[derive(Debug, serde::Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct ContractDeployment {
     pub id: uuid::Uuid,
@@ -164,14 +163,17 @@ pub(crate) async fn fetch_contract_identity(
     id: &str,
 ) -> ApiResult<(Uuid, String)> {
     if let Ok(uuid) = Uuid::parse_str(id) {
-        let (contract_id,): (String,) = sqlx::query_as("SELECT contract_id FROM contracts WHERE id = $1")
-            .bind(uuid)
-            .fetch_one(&state.db)
-            .await
-            .map_err(|err| match err {
-                sqlx::Error::RowNotFound => ApiError::not_found("ContractNotFound", "Contract not found"),
-                _ => db_internal_error("fetch contract identity by uuid", err),
-            })?;
+        let (contract_id,): (String,) =
+            sqlx::query_as("SELECT contract_id FROM contracts WHERE id = $1")
+                .bind(uuid)
+                .fetch_one(&state.db)
+                .await
+                .map_err(|err| match err {
+                    sqlx::Error::RowNotFound => {
+                        ApiError::not_found("ContractNotFound", "Contract not found")
+                    }
+                    _ => db_internal_error("fetch contract identity by uuid", err),
+                })?;
         return Ok((uuid, contract_id));
     }
 
@@ -181,7 +183,9 @@ pub(crate) async fn fetch_contract_identity(
             .fetch_one(&state.db)
             .await
             .map_err(|err| match err {
-                sqlx::Error::RowNotFound => ApiError::not_found("ContractNotFound", "Contract not found"),
+                sqlx::Error::RowNotFound => {
+                    ApiError::not_found("ContractNotFound", "Contract not found")
+                }
                 _ => db_internal_error("fetch contract identity by address", err),
             })?;
     Ok((uuid, contract_id))
@@ -226,13 +230,12 @@ fn contract_timestamp_for_sort(
     }
 }
 
-
 async fn track_contract_access(state: &AppState, contract_id: Uuid) {
     let cache_key = contract_id.to_string();
     if !state.cache.should_refresh_contract_access(&cache_key).await {
         return;
     }
-    
+
     let db = state.db.clone();
     tokio::spawn(async move {
         let _ = sqlx::query("UPDATE contracts SET last_accessed_at = NOW() WHERE id = $1")
@@ -1279,9 +1282,7 @@ pub async fn get_contract_search_suggestions(
     ),
     tag = "Contracts"
 )]
-pub async fn list_tags(
-    State(state): State<AppState>,
-) -> ApiResult<Json<Value>> {
+pub async fn list_tags(State(state): State<AppState>) -> ApiResult<Json<Value>> {
     let rows = sqlx::query!(
         "SELECT t.id, t.name, t.color, COUNT(ct.contract_id)::INT as usage_count \
          FROM tags t \
@@ -1437,11 +1438,14 @@ pub async fn list_contracts(
 
         let mut tags_map: HashMap<Uuid, Vec<shared::Tag>> = HashMap::new();
         for row in tag_rows {
-            tags_map.entry(row.contract_id).or_default().push(shared::Tag {
-                id: row.id,
-                name: row.name,
-                color: row.color,
-            });
+            tags_map
+                .entry(row.contract_id)
+                .or_default()
+                .push(shared::Tag {
+                    id: row.id,
+                    name: row.name,
+                    color: row.color,
+                });
         }
 
         for contract in &mut contracts {
@@ -1589,7 +1593,12 @@ fn render_contract_export(
             csv.push_str("id,logical_id,contract_id,wasm_hash,name,description,publisher_id,publisher_stellar_address,publisher_username,network,is_verified,category,tags,maturity,health_score,is_maintenance,deployment_count,audit_status,visibility,organization_id,network_configs,created_at,updated_at,verified_at,last_verified_at,last_accessed_at\n");
 
             for contract in contracts {
-                let tags = contract.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join("|");
+                let tags = contract
+                    .tags
+                    .iter()
+                    .map(|t| t.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("|");
                 let row = [
                     contract.id.to_string(),
                     optional_uuid_string(&contract.logical_id),
@@ -1627,19 +1636,10 @@ fn render_contract_export(
                 csv.push_str(&escaped);
                 csv.push('\n');
             }
-
-    query.push(
-        "        LOG(1 + cs.interaction_count + 2 * cs.deployment_count) as popularity_score,
-        1.0 / (1.0 + EXTRACT(DAYS FROM (NOW() - c.updated_at)) / 30.0) as recency_score,
-        (cs.avg_rating / 5.0) * LOG(1.0 + cs.review_count) as rating_score,
-        LOG(1 + cs.user_interaction_count) as personal_boost
-    FROM contracts c
-    JOIN contract_stats cs ON c.id = cs.id
-    WHERE (c.visibility = 'public'",
-    );
-
-    let mut count_query =
-        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM contracts c WHERE (c.visibility = 'public'");
+            Ok(csv)
+        }
+    }
+}
 
 fn apply_contract_export_filters<'a>(
     query: &mut QueryBuilder<'a, Postgres>,
@@ -1651,13 +1651,8 @@ fn apply_contract_export_filters<'a>(
         query.push(" OR (c.visibility = 'private' AND c.organization_id IN (SELECT organization_id FROM organization_members om JOIN publishers p ON om.publisher_id = p.id WHERE p.stellar_address = ");
         query.push_bind(&claims.sub);
         query.push("))");
-        
-        count_query.push(" OR (c.visibility = 'private' AND c.organization_id IN (SELECT organization_id FROM organization_members om JOIN publishers p ON om.publisher_id = p.id WHERE p.stellar_address = ");
-        count_query.push_bind(&claims.sub);
-        count_query.push("))");
     }
     query.push(")");
-    count_query.push(")");
 
     if filters.verified_only.unwrap_or(false) {
         query.push(" AND c.is_verified = true");
@@ -1851,10 +1846,7 @@ async fn fetch_contract_export_rows(
     query.push(" NULLS LAST, c.id ");
     query.push(direction);
 
-    let total: i64 = match count_query.build_query_scalar::<i64>().fetch_one(&state.db).await {
-        Ok(v) => v,
-        Err(err) => return db_internal_error("count filtered contracts", err).into_response(),
-    query
+    let mut records = query
         .build_query_as::<ContractMetadataExportRecord>()
         .fetch_all(&state.db)
         .await
@@ -1875,11 +1867,14 @@ async fn fetch_contract_export_rows(
 
         let mut tags_map: HashMap<Uuid, Vec<shared::Tag>> = HashMap::new();
         for row in tag_rows {
-            tags_map.entry(row.contract_id).or_default().push(shared::Tag {
-                id: row.id,
-                name: row.name,
-                color: row.color,
-            });
+            tags_map
+                .entry(row.contract_id)
+                .or_default()
+                .push(shared::Tag {
+                    id: row.id,
+                    name: row.name,
+                    color: row.color,
+                });
         }
 
         for record in &mut records {
@@ -2136,7 +2131,10 @@ pub async fn get_contract(
             .map_err(|err| match err {
                 sqlx::Error::RowNotFound => ApiError::not_found(
                     "ContractNotFound",
-                    format!("No contract found with slug: {} on network: {}", id, network),
+                    format!(
+                        "No contract found with slug: {} on network: {}",
+                        id, network
+                    ),
                 ),
                 _ => db_internal_error("get contract by slug", err),
             })?
@@ -2153,11 +2151,14 @@ pub async fn get_contract(
         Err(err) => return Err(db_internal_error("fetch tags", err)),
     };
 
-    contract.tags = tag_rows.into_iter().map(|r| shared::Tag {
-        id: r.id,
-        name: r.name,
-        color: r.color,
-    }).collect();
+    contract.tags = tag_rows
+        .into_iter()
+        .map(|r| shared::Tag {
+            id: r.id,
+            name: r.name,
+            color: r.color,
+        })
+        .collect();
 
     // Visibility check
     if contract.visibility == shared::VisibilityType::Private {
@@ -3420,7 +3421,6 @@ pub async fn create_contract_version(
     Ok(Json(version_row))
 }
 
-
 async fn ensure_contract_exists(
     state: &AppState,
     contract_uuid: Uuid,
@@ -3526,7 +3526,11 @@ pub async fn publish_contract(
     headers: HeaderMap,
     ValidatedJson(req): ValidatedJson<PublishRequest>,
 ) -> ApiResult<Json<Contract>> {
-    let mut tx = state.db.begin().await.map_err(|err| db_internal_error("begin publish tx", err))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|err| db_internal_error("begin publish tx", err))?;
 
     let publisher: Publisher = sqlx::query_as(
         "INSERT INTO publishers (stellar_address) VALUES ($1)
@@ -4076,7 +4080,6 @@ pub async fn get_contract_graph(
             )
             .await;
     }
-
 
     Ok(Json(graph))
 }
@@ -4650,7 +4653,11 @@ pub async fn update_contract_metadata(
     .map_err(|err| db_internal_error("fetch before tags", err))?;
     let before_tag_names: Vec<String> = before_tag_rows.into_iter().map(|r| r.name).collect();
 
-    let mut tx = state.db.begin().await.map_err(|err| db_internal_error("begin update metadata tx", err))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|err| db_internal_error("begin update metadata tx", err))?;
 
     let mut after: Contract = sqlx::query_as(
         "UPDATE contracts
@@ -4683,7 +4690,7 @@ pub async fn update_contract_metadata(
             let tag: shared::Tag = sqlx::query_as(
                 "INSERT INTO tags (name) VALUES ($1)
                  ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-                 RETURNING id, name, color"
+                 RETURNING id, name, color",
             )
             .bind(name)
             .fetch_one(&mut *tx)
@@ -4721,7 +4728,9 @@ pub async fn update_contract_metadata(
             .collect();
     }
 
-    tx.commit().await.map_err(|err| db_internal_error("commit update metadata tx", err))?;
+    tx.commit()
+        .await
+        .map_err(|err| db_internal_error("commit update metadata tx", err))?;
 
     let mut changes = serde_json::Map::new();
     if before.name != after.name {
@@ -5061,12 +5070,19 @@ pub async fn bulk_update_contract_status(
 ) -> ApiResult<Json<Value>> {
     let mut results = Vec::new();
 
-    let mut tx = state.db.begin().await.map_err(|e| db_internal_error("begin tx for bulk status update", e))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| db_internal_error("begin tx for bulk status update", e))?;
 
     for item in req.items.into_iter() {
         let id = item.id;
         let normalized_status = item.status.to_ascii_lowercase();
-        if normalized_status != "pending" && normalized_status != "verified" && normalized_status != "failed" {
+        if normalized_status != "pending"
+            && normalized_status != "verified"
+            && normalized_status != "failed"
+        {
             results.push(json!({ "id": id, "ok": false, "error": "invalid_status" }));
             continue;
         }
@@ -5084,7 +5100,12 @@ pub async fn bulk_update_contract_status(
             }
         };
 
-        let verified_at: Option<chrono::DateTime<chrono::Utc>> = if normalized_status == "verified" { Some(chrono::Utc::now()) } else { None };
+        let verified_at: Option<chrono::DateTime<chrono::Utc>> = if normalized_status == "verified"
+        {
+            Some(chrono::Utc::now())
+        } else {
+            None
+        };
         let is_verified_after = normalized_status == "verified";
 
         let verification_id: Result<Uuid, sqlx::Error> = sqlx::query_scalar(
@@ -5098,7 +5119,9 @@ pub async fn bulk_update_contract_status(
         .await;
 
         if let Err(e) = verification_id {
-            results.push(json!({ "id": id, "ok": false, "error": format!("db_insert_verification: {}", e) }));
+            results.push(
+                json!({ "id": id, "ok": false, "error": format!("db_insert_verification: {}", e) }),
+            );
             continue;
         }
 
@@ -5126,13 +5149,22 @@ pub async fn bulk_update_contract_status(
             "verification_id": { "before": Value::Null, "after": verification_id }
         });
 
-        let _ = write_contract_audit_log(&state.db, AuditActionType::VerificationChanged, id, item.user_id.unwrap_or(contract.publisher_id), changes, "bulk")
-            .await;
+        let _ = write_contract_audit_log(
+            &state.db,
+            AuditActionType::VerificationChanged,
+            id,
+            item.user_id.unwrap_or(contract.publisher_id),
+            changes,
+            "bulk",
+        )
+        .await;
 
         results.push(json!({ "id": id, "ok": true, "verification_id": verification_id }));
     }
 
-    tx.commit().await.map_err(|e| db_internal_error("commit bulk status update", e))?;
+    tx.commit()
+        .await
+        .map_err(|e| db_internal_error("commit bulk status update", e))?;
 
     Ok(Json(json!({ "results": results })))
 }
@@ -5267,7 +5299,13 @@ pub async fn get_contract_deployments(
                 .await
                 .map_err(|err| db_internal_error("get logical_id", err))?;
 
-    ensure_contract_exists(&state, contract_uuid, &id, "get contract for list deployments").await?;
+        ensure_contract_exists(
+            &state,
+            contract_uuid,
+            &id,
+            "get contract for list deployments",
+        )
+        .await?;
         if let Some(lid) = logical_id {
             sqlx::query_scalar("SELECT id FROM contracts WHERE logical_id = $1")
                 .bind(lid)
@@ -5407,7 +5445,7 @@ pub async fn get_contract_deployments(
 pub async fn get_dashboard_analytics(
     State(_state): State<AppState>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    Ok(Json(serde_json::json!({ 
+    Ok(Json(serde_json::json!({
         "category_distribution": [],
         "network_usage": [],
         "deployment_trends": [],

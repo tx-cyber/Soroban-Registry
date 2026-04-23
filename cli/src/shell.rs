@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor};
+use rustyline::DefaultEditor;
 use shlex;
 
 pub struct ShellContext {
@@ -101,7 +101,7 @@ pub async fn run(api_url: &str, initial_network: Option<String>) -> Result<()> {
                     _ => {
                         // Try to parse as a normal CLI command
                         let mut cmd_args = vec!["soroban-registry".to_string()];
-                        
+
                         // Inject context if not present in args
                         let has_network = args.iter().any(|a| a == "--network");
                         let has_contract = args.iter().any(|a| a == "--contract-id" || a == "--id");
@@ -113,14 +113,15 @@ pub async fn run(api_url: &str, initial_network: Option<String>) -> Result<()> {
 
                         // Use the sub-command and its arguments
                         let subcmd = args[0].clone();
-                        
+
                         // Context injection for specific commands if context exists
                         let final_args = args.clone();
                         if let Some(ref cid) = context.contract_id {
                             if !has_contract {
                                 match subcmd.as_str() {
-                                    "info" | "export" | "breaking-changes" | "profile" | "coverage" | "verify" => {
-                                        // These usually take --id or positional. 
+                                    "info" | "export" | "breaking-changes" | "profile"
+                                    | "coverage" | "verify" => {
+                                        // These usually take --id or positional.
                                         // If it's a known command that needs ID and it's missing, let's try to add it.
                                         // For simplicity, we just pass what the user typed.
                                     }
@@ -167,13 +168,13 @@ async fn execute_command(args: Vec<String>, _context: &ShellContext) -> Result<(
                 net_str = "mainnet".to_string();
             }
             let network: crate::commands::Network = net_str.parse().unwrap();
-            
+
             crate::dispatch_command(cli, network, cfg_network).await
         }
         Err(e) => {
             if e.to_string().contains("Usage:") {
-                 println!("{}", e);
-                 Ok(())
+                println!("{}", e);
+                Ok(())
             } else {
                 Err(e.into())
             }

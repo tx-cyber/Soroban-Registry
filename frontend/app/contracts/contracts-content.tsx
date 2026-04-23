@@ -8,14 +8,11 @@ import ContractCardSkeleton from '@/components/ContractCardSkeleton';
 import { ActiveFilters } from '@/components/contracts/ActiveFilters';
 import { FilterPanel } from '@/components/contracts/FilterPanel';
 import { ResultsCount } from '@/components/contracts/ResultsCount';
-import { SearchBar } from '@/components/contracts/SearchBar';
 import { SortDropdown, SortBy } from '@/components/contracts/SortDropdown';
 import TagAutocomplete from '@/components/tags/TagAutocomplete';
 import { Filter, Package, Search, SlidersHorizontal, X, Sparkles, CheckCircle, Users } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAnalytics } from '@/hooks/useAnalytics';
-import QueryBuilder from '@/components/contracts/QueryBuilder';
-import FavoriteSearches from '@/components/contracts/FavoriteSearches';
 
 const DEFAULT_PAGE_SIZE = 12;
 const CATEGORY_OPTIONS_NAMES = [
@@ -214,7 +211,7 @@ export function ContractsContent() {
     networks: networks.length > 0 ? (networks as Array<'mainnet'|'testnet'|'futurenet'>) : undefined,
     author: author || undefined,
     verified_only: verified_only || undefined,
-    sort_by: sort_by as any,
+    sort_by,
     page,
     page_size,
   };

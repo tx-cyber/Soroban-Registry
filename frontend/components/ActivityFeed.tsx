@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api, AnalyticsEvent, AnalyticsEventType, ActivityFeedResponse } from '@/lib/api';
 import { useRealtime } from '@/hooks/useRealtime';
 import { formatPublicKey, formatShortenedText } from '@/lib/utils/formatting';
@@ -16,11 +16,27 @@ import {
   Filter,
   Clock,
   Zap,
-  Tag
+  Tag,
+  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 
-const EVENT_CONFIG: Record<string, { icon: any, label: string, color: string }> = {
+type RealtimeDeploymentEvent = {
+  contract_id: string;
+  publisher?: string;
+  contract_name?: string;
+  version?: string;
+  timestamp?: string;
+};
+
+type RealtimeUpdateEvent = {
+  contract_id: string;
+  update_type?: string;
+  details?: Record<string, unknown>;
+  timestamp?: string;
+};
+
+const EVENT_CONFIG: Record<string, { icon: LucideIcon; label: string; color: string }> = {
   contract_published: { icon: Upload, label: 'Published', color: 'text-blue-500 bg-blue-500/10' },
   contract_verified: { icon: CheckCircle2, label: 'Verified', color: 'text-emerald-500 bg-emerald-500/10' },
   contract_deployed: { icon: Zap, label: 'Deployed', color: 'text-amber-500 bg-amber-500/10' },
@@ -30,7 +46,6 @@ const EVENT_CONFIG: Record<string, { icon: any, label: string, color: string }> 
 };
 
 export default function ActivityFeed() {
-  const queryClient = useQueryClient();
   const { subscribe, isConnected } = useRealtime();
 
   const [eventType, setEventType] = useState<AnalyticsEventType | 'all'>('all');
@@ -57,7 +72,7 @@ export default function ActivityFeed() {
 
   // Handle real-time events
   useEffect(() => {
-    const handleDeployment = (event: any) => {
+    const handleDeployment = (event: RealtimeDeploymentEvent) => {
       // Convert RealtimeEvent to AnalyticsEvent
       const newEvent: AnalyticsEvent = {
         id: Math.random().toString(36).substring(7),
@@ -74,7 +89,7 @@ export default function ActivityFeed() {
       }
     };
 
-    const handleUpdate = (event: any) => {
+    const handleUpdate = (event: RealtimeUpdateEvent) => {
       const newEvent: AnalyticsEvent = {
         id: Math.random().toString(36).substring(7),
         event_type: 'contract_updated',
@@ -148,7 +163,7 @@ export default function ActivityFeed() {
           <Filter className="w-4 h-4 text-muted-foreground" />
           <select 
             value={eventType}
-            onChange={(e) => setEventType(e.target.value as any)}
+            onChange={(e) => setEventType(e.target.value as AnalyticsEventType | 'all')}
             className="bg-transparent text-sm font-medium text-foreground focus:outline-none cursor-pointer"
           >
             <option value="all">All Events</option>

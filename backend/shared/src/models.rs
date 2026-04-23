@@ -3611,7 +3611,9 @@ pub enum ScanStatus {
 }
 
 /// Security issue severity
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema, PartialEq, PartialOrd)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema, PartialEq, PartialOrd,
+)]
 #[sqlx(type_name = "issue_severity_type", rename_all = "lowercase")]
 pub enum IssueSeverity {
     Low,

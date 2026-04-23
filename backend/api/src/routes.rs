@@ -3,13 +3,11 @@ use crate::openapi;
 use crate::{
     ab_test_handlers, analytics_handlers, auth, auth_handlers, batch_verify_handlers,
     breaking_changes, canary_handlers, category_handlers, clone_federation_handlers,
-    compatibility_testing_handlers, contract_events, custom_metrics_handlers,
-    deprecation_handlers, handlers, interoperability_handlers, metrics_handler,
-    migration_handlers, org_handlers, performance_handlers, resource_handlers,
-    security_scan_handlers, similarity_handlers, simulation_handlers, state::AppState,
-    subscription_handlers, websocket,
+    compatibility_testing_handlers, contract_events, custom_metrics_handlers, deprecation_handlers,
+    handlers, interoperability_handlers, metrics_handler, migration_handlers, org_handlers,
+    performance_handlers, resource_handlers, security_scan_handlers, similarity_handlers,
+    simulation_handlers, state::AppState, subscription_handlers, websocket,
 };
-
 
 use axum::{
     middleware,
@@ -38,10 +36,7 @@ pub fn contract_routes() -> Router<AppState> {
             "/api/contracts",
             get(handlers::list_contracts).post(handlers::publish_contract),
         )
-        .route(
-            "/api/contracts/tags",
-            get(handlers::list_tags),
-        )
+        .route("/api/contracts/tags", get(handlers::list_tags))
         .route(
             "/api/contracts/export",
             post(handlers::export_contract_metadata),
@@ -184,7 +179,6 @@ pub fn contract_routes() -> Router<AppState> {
             "/api/analytics/dashboard",
             get(analytics_handlers::get_analytics_summary),
         )
-
         .route(
             "/api/contracts/:id/dependencies",
             get(crate::dependency_handlers::get_contract_dependencies),
@@ -193,7 +187,6 @@ pub fn contract_routes() -> Router<AppState> {
             "/api/contracts/:id/graph",
             get(handlers::get_contract_local_graph),
         )
-
         .route(
             "/api/contracts/:id/trust-score",
             get(handlers::get_trust_score),
@@ -752,8 +745,7 @@ pub fn subscription_routes() -> Router<AppState> {
         // Webhooks
         .route(
             "/api/webhooks",
-            get(subscription_handlers::list_webhooks)
-                .post(subscription_handlers::create_webhook),
+            get(subscription_handlers::list_webhooks).post(subscription_handlers::create_webhook),
         )
         .route(
             "/api/webhooks/:id",
