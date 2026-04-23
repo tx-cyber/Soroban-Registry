@@ -12,6 +12,7 @@ const NAV_LINKS = [
     { href: '/contracts',       label: 'Browse',  icon: Package   },
     { href: '/compare',         label: 'Compare', icon: Columns2  },
     { href: '/verify-contract', label: 'Verify',  icon: ShieldCheck },
+    { href: '/developer',       label: 'IDE',     icon: Code2 },
 ] as const;
 
 const EXPLORE_LINKS = [
@@ -29,6 +30,7 @@ const QUICK_LINKS = [
     { href: '/analytics',  label: 'Analytics',           icon: PieChart  },
     { href: '/templates',  label: 'Templates',           icon: Layers    },
     { href: '/graph',      label: 'Dependency Graph',    icon: GitBranch },
+    { href: '/developer',  label: 'Contract IDE',        icon: Code2 },
     { href: '/verify-contract', label: 'Verify Contract', icon: ShieldCheck },
 ] as const;
 
@@ -520,6 +522,7 @@ export default function Navbar() {
                                 { href: '/templates', label: 'Templates', icon: Layers },
                                 { href: '/analytics', label: 'Search Analytics', icon: TrendingUp },
                                 { href: '/graph', label: 'Dependency Graph', icon: GitBranch },
+                                { href: '/developer', label: 'Contract IDE', icon: Code2 },
                             ].map(({ href, label, icon: Icon }) => (
                                 <Link
                                     key={href}
