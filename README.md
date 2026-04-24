@@ -162,6 +162,13 @@ soroban-registry info <contract-id>
 # Publish a contract
 soroban-registry publish --contract-path ./my-contract
 
+# Scaffold a new contract project using templates
+soroban-registry scaffold init my-contract
+
+# Clone specific templates (e.g. token) with arguments
+soroban-registry scaffold list
+soroban-registry scaffold clone token my-token --symbol TKN --initial-supply 1000000
+
 # Verify a contract
 soroban-registry verify <contract-id> --source ./src
 
