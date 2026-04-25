@@ -66,6 +66,7 @@ mod publisher_verification_handlers; // Issue #603
 mod type_safety;
 mod validation;
 mod websocket;
+mod zk_proof_handlers;
 
 use anyhow::Result;
 use axum::extract::{Request, State};
