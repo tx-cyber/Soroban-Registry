@@ -34,8 +34,13 @@ mod sla;
 mod table_format;
 mod test_framework;
 mod track_deployment;
+mod track_deployment;
 mod webhook;
 mod wizard;
+mod shell;
+mod plugins;
+mod deploy;
+mod upgrade;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -258,29 +263,27 @@ pub enum Commands {
         format: String,
     },
 
-    /// Generate client code and docs directly from contract ABI
-    Generate {
-        /// Path to contract WASM file or ABI JSON file
-        contract_path: String,
+    /// Start an interactive contract deployment workflow
+    Deploy {},
 
-        /// Output language: typescript, rust, json, markdown
-        #[arg(long, default_value = "typescript")]
-        lang: String,
+    /// Manage contract versions
+    Version {
+        #[command(subcommand)]
+        action: VersionCommands,
+    },
 
-        /// Optional file output path
-        #[arg(long, short = 'o')]
-        output: Option<String>,
-
-        /// Optional markdown documentation output path
-        #[arg(long)]
-        docs_output: Option<String>,
+    /// Manage contract upgrades and rollbacks
+    Upgrade {
+        #[command(subcommand)]
+        action: UpgradeSubcommands,
     },
 
     /// Launch the interactive setup wizard
     Wizard {},
 
-    /// Launch the interactive shell
-    Shell {
+    /// Enter interactive REPL mode
+    #[command(alias = "shell")]
+    Repl {
         /// Initial network
         #[arg(long)]
         network: Option<String>,
@@ -446,6 +449,12 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigSubcommands,
+    },
+
+    /// Inspect and modify contract state (dev/test mutation only)
+    State {
+        #[command(subcommand)]
+        action: StateSubcommands,
     },
 
     /// Run formal verification analysis against a deployed or local contract
@@ -643,6 +652,39 @@ pub enum Commands {
         #[arg(long, short = 'o')]
         output: Option<String>,
     },
+
+    /// Track contract deployment status until confirmed or timeout (#524)
+    TrackDeployment {
+        /// On-chain contract ID
+        #[arg(long)]
+        contract_id: String,
+
+        /// Stellar network (mainnet | testnet | futurenet)
+        #[arg(long, default_value = "testnet")]
+        network: String,
+
+        /// Optional transaction hash to track (polls transaction endpoints first)
+        #[arg(long)]
+        tx_hash: Option<String>,
+
+        /// Maximum wait time in seconds before exiting with code 2
+        #[arg(long, default_value_t = 60)]
+        wait_timeout: u64,
+
+        /// Output machine-readable JSON status
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Plugin management (install, configure, run)
+    Plugins {
+        #[command(subcommand)]
+        action: PluginCommands,
+    },
+
+    /// External command (may be provided by an installed plugin)
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 /// Sub-commands for the `network` group
@@ -824,6 +866,157 @@ pub enum ConfigSubcommands {
         version: i32,
         #[arg(long)]
         created_by: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum StateSubcommands {
+    /// Get a single state value by key
+    Get {
+        /// Contract identifier
+        contract_id: String,
+        /// State key
+        key: String,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Set a state key/value (testnet and futurenet only)
+    Set {
+        /// Contract identifier
+        contract_id: String,
+        /// State key
+        key: String,
+        /// New value (JSON is parsed, otherwise stored as string)
+        value: String,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Dump full contract state
+    Dump {
+        /// Contract identifier
+        contract_id: String,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create a state snapshot
+    Snapshot {
+        /// Contract identifier
+        contract_id: String,
+        /// Optional label for the snapshot
+        #[arg(long)]
+        label: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// List saved state snapshots
+    Snapshots {
+        /// Contract identifier
+        contract_id: String,
+        /// Maximum number of snapshots to return
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Browse state change history
+    History {
+        /// Contract identifier
+        contract_id: String,
+        /// Filter by key
+        #[arg(long)]
+        key: Option<String>,
+        /// Maximum number of entries to return
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// Sub-commands for the `plugins` group
+#[derive(Debug, Subcommand)]
+pub enum PluginCommands {
+    /// List installed plugins and their commands
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Browse the registry marketplace
+    Marketplace {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Install a plugin from the registry
+    Install {
+        /// Plugin name
+        name: String,
+        /// Optional version (defaults to marketplace version)
+        #[arg(long)]
+        version: Option<String>,
+    },
+
+    /// Uninstall an installed plugin
+    Uninstall {
+        /// Plugin name
+        name: String,
+        /// Optional version (defaults to removing all versions)
+        #[arg(long)]
+        version: Option<String>,
+    },
+
+    /// Run a plugin-provided command explicitly
+    Run {
+        /// The plugin command name
+        command: String,
+        /// Arguments passed to the plugin command
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+
+    /// Enable/disable plugins and set per-plugin configuration
+    Config {
+        #[command(subcommand)]
+        action: PluginConfigCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PluginConfigCommands {
+    /// Get the current JSON config for a plugin
+    Get {
+        /// Plugin name
+        name: String,
+    },
+
+    /// Replace the plugin JSON config (must be a JSON object)
+    Set {
+        /// Plugin name
+        name: String,
+        /// JSON object
+        #[arg(long)]
+        json: String,
+    },
+
+    /// Disable a plugin (commands won't be discovered)
+    Disable {
+        /// Plugin name
+        name: String,
+    },
+
+    /// Enable a plugin (default)
+    Enable {
+        /// Plugin name
+        name: String,
     },
 }
 
@@ -1166,6 +1359,61 @@ pub enum MigrateCommands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum VersionCommands {
+    /// List versions for a contract
+    List {
+        /// Contract identifier
+        contract_id: String,
+    },
+    /// Bump the semantic version
+    Bump {
+        /// Current version
+        current: String,
+        /// Bump level: major, minor, or patch
+        #[arg(long, default_value = "patch")]
+        level: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum UpgradeSubcommands {
+    /// Analyze compatibility between two contract versions
+    Analyze {
+        /// Path to old WASM
+        old_wasm: String,
+        /// Path to new WASM
+        new_wasm: String,
+    },
+    /// Apply an upgrade to a deployed contract
+    Apply {
+        /// Contract identifier
+        contract_id: String,
+        /// Path to new WASM
+        new_wasm: String,
+    },
+    /// Rollback a contract to a previous version
+    Rollback {
+        /// Contract identifier
+        contract_id: String,
+        /// Version to rollback to
+        version: String,
+    },
+    /// Generate a migration script template between versions
+    Generate {
+        /// Old contract identifier
+        old_id: String,
+        /// New contract identifier
+        new_id: String,
+        /// Language (rust or js)
+        #[arg(long, default_value = "rust")]
+        language: String,
+        /// Output file path
+        #[arg(long, short = 'o')]
+        output: Option<String>,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -1188,9 +1436,7 @@ async fn main() -> Result<()> {
 
 pub async fn handle_command(cli: Cli) -> Result<()> {
     match cli.command {
-        Commands::Shell {
-            network: shell_network,
-        } => shell::run(&cli.api_url, shell_network).await,
+        Commands::Repl { network: shell_network } => shell::run(&cli.api_url, shell_network).await,
         _ => {
             // ── Resolve network ───────────────────────────────────────────────────────
             let cfg_network = config::resolve_network(cli.network.clone())?;
@@ -1213,11 +1459,118 @@ pub async fn dispatch_command(
     log::debug!("Network: {:?}", network);
 
     match cli.command {
-        Commands::Shell { .. } => {
+        Commands::Repl { .. } => {
             // Already handled at top level, but for completeness or nested calls:
             // We could call shell::run here again but to break recursion we don't.
-            println!("{}", "Warning: Shell already running".yellow());
+            println!("{}", "Warning: REPL already running".yellow());
             return Ok(());
+        }
+        Commands::Plugins { action } => match action {
+            PluginCommands::List { json } => {
+                let installed = plugins::discover_installed()?;
+                if json {
+                    let out: Vec<serde_json::Value> = installed
+                        .into_iter()
+                        .map(|p| {
+                            serde_json::json!({
+                                "manifest": p.manifest,
+                                "path": p.manifest_path.to_string_lossy().to_string()
+                            })
+                        })
+                        .collect();
+                    println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "plugins": out }))?);
+                } else {
+                    if installed.is_empty() {
+                        println!("{}", "No plugins installed.".yellow());
+                    } else {
+                        println!("\n{}", "Installed Plugins:".bold().cyan());
+                        println!("{}", "=".repeat(80).cyan());
+                        for p in installed {
+                            let desc = p.manifest.description.clone().unwrap_or_default();
+                            println!(
+                                "  {}@{}  {}",
+                                p.manifest.name.bold(),
+                                p.manifest.version.bright_blue(),
+                                desc.bright_black()
+                            );
+                            for cmd in &p.manifest.commands {
+                                println!(
+                                    "    - {}  {}",
+                                    cmd.name.bright_green(),
+                                    cmd.description.clone().unwrap_or_default().bright_black()
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            PluginCommands::Marketplace { json } => {
+                let marketplace = plugins::fetch_marketplace(&cli.api_url).await?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&marketplace)?);
+                } else {
+                    if marketplace.plugins.is_empty() {
+                        println!("{}", "Marketplace returned no plugins.".yellow());
+                    } else {
+                        println!("\n{}", "Plugin Marketplace:".bold().cyan());
+                        println!("{}", "=".repeat(80).cyan());
+                        for p in marketplace.plugins {
+                            println!(
+                                "  {}@{}  {}",
+                                p.name.bold(),
+                                p.version.bright_blue(),
+                                p.description.unwrap_or_default().bright_black()
+                            );
+                            for cmd in p.commands {
+                                println!(
+                                    "    - {}  {}",
+                                    cmd.name.bright_green(),
+                                    cmd.description.unwrap_or_default().bright_black()
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            PluginCommands::Install { name, version } => {
+                plugins::install_from_registry(&cli.api_url, &name, version.as_deref()).await?;
+            }
+            PluginCommands::Uninstall { name, version } => {
+                plugins::uninstall(&name, version.as_deref())?;
+            }
+            PluginCommands::Run { command, args } => {
+                let result =
+                    plugins::run_installed_command(&cli.api_url, &network.to_string(), &command, args)
+                        .await?;
+                print!("{}", result.stdout);
+            }
+            PluginCommands::Config { action } => match action {
+                PluginConfigCommands::Get { name } => {
+                    let cfg = plugins::get_plugin_config(&name)?;
+                    println!("{}", serde_json::to_string_pretty(&cfg)?);
+                }
+                PluginConfigCommands::Set { name, json } => {
+                    plugins::set_plugin_config_json(&name, &json)?;
+                    println!("{} Updated config for {}", "✓".green(), name.bold());
+                }
+                PluginConfigCommands::Disable { name } => {
+                    plugins::set_plugin_enabled(&name, false)?;
+                    println!("{} Disabled {}", "✓".green(), name.bold());
+                }
+                PluginConfigCommands::Enable { name } => {
+                    plugins::set_plugin_enabled(&name, true)?;
+                    println!("{} Enabled {}", "✓".green(), name.bold());
+                }
+            },
+        },
+        Commands::External(args) => {
+            if args.is_empty() {
+                anyhow::bail!("No external command provided");
+            }
+            let cmd = args[0].clone();
+            let rest = args.into_iter().skip(1).collect::<Vec<_>>();
+            let result = plugins::run_installed_command(&cli.api_url, &network.to_string(), &cmd, rest).await?;
+            print!("{}", result.stdout);
         }
         Commands::Search {
             query,
@@ -1446,26 +1799,39 @@ pub async fn dispatch_command(
             );
             commands::openapi(&contract_path, &output, &format)?;
         }
-        Commands::Generate {
-            contract_path,
-            lang,
-            output,
-            docs_output,
-        } => {
-            log::debug!(
-                "Command: generate | contract_path={} lang={} output={:?} docs_output={:?}",
-                contract_path,
-                lang,
-                output,
-                docs_output
-            );
-            codegen::generate(
-                &contract_path,
-                &lang,
-                output.as_deref(),
-                docs_output.as_deref(),
-            )?;
+        Commands::Deploy {} => {
+            log::debug!("Command: deploy");
+            deploy::run_interactive().await?;
         }
+        Commands::Version { action } => match action {
+            VersionCommands::List { contract_id } => {
+                log::debug!("Command: version list | contract_id={}", contract_id);
+                upgrade::version::list(&contract_id)?;
+            }
+            VersionCommands::Bump { current, level } => {
+                log::debug!("Command: version bump | current={} level={}", current, level);
+                let next = upgrade::version::bump(&current, &level)?;
+                println!("Next version: {}", next.green().bold());
+            }
+        },
+        Commands::Upgrade { action } => match action {
+            UpgradeSubcommands::Analyze { old_wasm, new_wasm } => {
+                log::debug!("Command: upgrade analyze | old={} new={}", old_wasm, new_wasm);
+                upgrade::manager::analyze(&old_wasm, &new_wasm).await?;
+            }
+            UpgradeSubcommands::Apply { contract_id, new_wasm } => {
+                log::debug!("Command: upgrade apply | contract_id={} new={}", contract_id, new_wasm);
+                upgrade::manager::apply(&contract_id, &new_wasm).await?;
+            }
+            UpgradeSubcommands::Rollback { contract_id, version } => {
+                log::debug!("Command: upgrade rollback | contract_id={} version={}", contract_id, version);
+                upgrade::manager::rollback(&contract_id, &version).await?;
+            }
+            UpgradeSubcommands::Generate { old_id, new_id, language, output } => {
+                log::debug!("Command: upgrade generate | old={} new={} lang={}", old_id, new_id, language);
+                crate::migration::generate_template(&old_id, &new_id, &language, output.as_deref())?;
+            }
+        },
         Commands::Wizard {} => {
             log::debug!("Command: wizard");
             wizard::run(&cli.api_url).await?;
@@ -1780,6 +2146,49 @@ pub async fn dispatch_command(
                     &created_by,
                 )
                 .await?;
+            }
+        },
+        Commands::State { action } => match action {
+            StateSubcommands::Get {
+                contract_id,
+                key,
+                json,
+            } => {
+                commands::state_get(&cli.api_url, &contract_id, &key, network, json).await?;
+            }
+            StateSubcommands::Set {
+                contract_id,
+                key,
+                value,
+                json,
+            } => {
+                commands::state_set(&cli.api_url, &contract_id, &key, &value, network, json)
+                    .await?;
+            }
+            StateSubcommands::Dump { contract_id, json } => {
+                commands::state_dump(&contract_id, network, json)?;
+            }
+            StateSubcommands::Snapshot {
+                contract_id,
+                label,
+                json,
+            } => {
+                commands::state_snapshot_create(&contract_id, network, label.as_deref(), json)?;
+            }
+            StateSubcommands::Snapshots {
+                contract_id,
+                limit,
+                json,
+            } => {
+                commands::state_snapshot_list(&contract_id, network, limit, json)?;
+            }
+            StateSubcommands::History {
+                contract_id,
+                key,
+                limit,
+                json,
+            } => {
+                commands::state_history(&contract_id, network, key.as_deref(), limit, json)?;
             }
         },
         Commands::VerifyFormal {

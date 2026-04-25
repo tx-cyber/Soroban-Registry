@@ -30,6 +30,18 @@ pub fn auth_routes() -> Router<AppState> {
         .route("/api/auth/verify", post(auth_handlers::verify_challenge))
 }
 
+pub fn plugin_routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/api/plugins/marketplace",
+            get(plugin_marketplace_handlers::get_marketplace),
+        )
+        .route(
+            "/api/plugins/:name/:version",
+            get(plugin_marketplace_handlers::get_plugin_manifest),
+        )
+}
+
 pub fn contract_routes() -> Router<AppState> {
     Router::new()
         .route("/ws/contracts", get(contract_events::contracts_websocket))
@@ -263,6 +275,15 @@ pub fn contract_routes() -> Router<AppState> {
         )
         .route(
             "/api/contracts/:id/compatibility",
+            get(handlers::compatibility::get_contract_compatibility)
+                .post(handlers::compatibility::add_contract_compatibility),
+        )
+        .route(
+            "/api/contracts/:id/compatibility/export",
+            get(handlers::compatibility::export_contract_compatibility),
+        )
+        .route(
+            "/api/contracts/:id/interoperability",
             get(interoperability_handlers::get_contract_interoperability),
         )
         .route(
@@ -706,10 +727,9 @@ pub fn federation_routes() -> Router<AppState> {
 }
 
 pub fn websocket_routes() -> Router<AppState> {
-    Router::new().route(
-        "/ws/contracts",
-        axum::routing::get(websocket::websocket_handler),
-    )
+    // /ws/contracts is registered in contract_routes via contract_events::contracts_websocket.
+    // This function is retained so main.rs can call it without a merge conflict.
+    Router::new()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -803,5 +823,100 @@ pub fn subscription_routes() -> Router<AppState> {
         .route(
             "/api/webhooks/:id",
             delete(subscription_handlers::delete_webhook),
+        )
+        .route(
+            "/api/webhooks/:id/deliveries",
+            get(subscription_handlers::get_webhook_deliveries),
+        )
+        .route(
+            "/api/webhooks/:id/test",
+            post(subscription_handlers::test_webhook),
+        )
+        .route(
+            "/api/webhook-deliveries/:id/retry",
+            post(subscription_handlers::retry_webhook_delivery),
+        )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FORMAL VERIFICATION ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTRACT INTERACTION GRAPH ANALYSIS ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+pub fn graph_analysis_routes() -> Router<AppState> {
+    Router::new()
+        // Full analysis report: clusters + critical contracts + cycles
+        .route(
+            "/api/contracts/graph/analysis",
+            get(graph_analysis_handlers::get_graph_analysis),
+        )
+        // Sub-network / community list
+        .route(
+            "/api/contracts/graph/clusters",
+            get(graph_analysis_handlers::get_graph_clusters),
+        )
+        // Sub-network detail by cluster ID
+        .route(
+            "/api/contracts/graph/subnetwork/:cluster_id",
+            get(graph_analysis_handlers::get_subnetwork),
+        )
+        // Critical contract ranking
+        .route(
+            "/api/contracts/graph/critical",
+            get(graph_analysis_handlers::get_critical_contracts),
+        )
+        // Vulnerability propagation from a specific contract
+        .route(
+            "/api/contracts/:id/vulnerability-propagation",
+            get(graph_analysis_handlers::get_vulnerability_propagation),
+        )
+}
+
+pub fn formal_verification_routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/api/contracts/:id/formal-verification",
+            post(formal_verification_handlers::trigger_formal_verification)
+                .get(formal_verification_handlers::list_formal_verification_sessions),
+        )
+        .route(
+            "/api/contracts/:id/formal-verification/:session_id",
+            get(formal_verification_handlers::get_formal_verification_session),
+        )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZERO-KNOWLEDGE PROOF VALIDATION ROUTES (#624)
+// ═══════════════════════════════════════════════════════════════════════════
+
+pub fn zk_proof_routes() -> Router<AppState> {
+    Router::new()
+        // ── Circuit management ─────────────────────────────────────────
+        .route(
+            "/api/contracts/:id/zk/circuits",
+            post(zk_proof_handlers::register_circuit)
+                .get(zk_proof_handlers::list_circuits),
+        )
+        .route(
+            "/api/contracts/:id/zk/circuits/:circuit_id",
+            get(zk_proof_handlers::get_circuit),
+        )
+        // ── Proof submission & validation ──────────────────────────────
+        .route(
+            "/api/contracts/:id/zk/proofs",
+            post(zk_proof_handlers::submit_proof)
+                .get(zk_proof_handlers::list_proofs),
+        )
+        .route(
+            "/api/contracts/:id/zk/proofs/:proof_id",
+            get(zk_proof_handlers::get_proof),
+        )
+        // ── Privacy-preserving analytics ───────────────────────────────
+        .route(
+            "/api/contracts/:id/zk/analytics",
+            get(zk_proof_handlers::get_zk_analytics),
         )
 }

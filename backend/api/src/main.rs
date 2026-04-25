@@ -47,6 +47,7 @@ mod onchain_verification;
 mod openapi;
 mod org_handlers;
 mod patch_handlers;
+mod plugin_marketplace_handlers;
 mod performance_handlers;
 mod rate_limit;
 mod recommendation_handlers;
@@ -62,10 +63,21 @@ mod similarity_handlers;
 mod simulation;
 mod simulation_handlers;
 mod state;
-mod publisher_verification_handlers; // Issue #603
+
+mod clone_federation_handlers;
+mod formal_verification;
+mod formal_verification_handlers;
+mod graph_analysis;
+mod graph_analysis_handlers;
+mod pagination;
+mod gas_estimation_handlers;
+mod security_scan_handlers;
+mod subscription_handlers;
 mod type_safety;
 mod validation;
+mod webhook_delivery;
 mod websocket;
+mod zk_proof_handlers;
 
 use anyhow::Result;
 use axum::extract::{Request, State};
@@ -193,6 +205,9 @@ async fn main() -> Result<()> {
     // Initialize GraphQL schema
     let schema = graphql::schema::build_schema(state.clone());
 
+    // Spawn webhook delivery background task
+    webhook_delivery::spawn_webhook_delivery_task(pool.clone());
+
     // Spawn the background DB and cache monitoring task
     db_monitoring::spawn_db_monitoring_task(pool.clone(), state.cache.clone());
 
@@ -253,6 +268,7 @@ async fn main() -> Result<()> {
     // Build router
     let app = Router::new()
         .merge(routes::auth_routes())
+        .merge(routes::plugin_routes())
         .merge(routes::organization_routes())
         .merge(routes::contract_routes())
         .merge(routes::publisher_routes())
@@ -275,6 +291,9 @@ async fn main() -> Result<()> {
         .merge(multisig_routes::routes())
         .merge(routes::observability_routes())
         .merge(routes::websocket_routes())
+        .merge(routes::subscription_routes())
+        .merge(routes::graph_analysis_routes())
+        .merge(routes::formal_verification_routes())
         .merge(routes::validator_routes())
         .merge(release_notes_routes::release_notes_routes())
         .route(
