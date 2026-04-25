@@ -1,7 +1,9 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use serde::de::{self, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::fmt;
 use uuid::Uuid;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -156,7 +158,7 @@ pub struct NetworkListResponse {
 }
 
 /// Network where the contract is deployed
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema, PartialEq, Eq)]
 #[sqlx(type_name = "network_type", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum Network {
@@ -173,6 +175,97 @@ impl std::fmt::Display for Network {
             Network::Futurenet => write!(f, "futurenet"),
         }
     }
+}
+
+fn parse_network_value<E: de::Error>(value: &str) -> Result<Network, E> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "mainnet" => Ok(Network::Mainnet),
+        "testnet" => Ok(Network::Testnet),
+        "futurenet" => Ok(Network::Futurenet),
+        _ => Err(E::custom(format!(
+            "invalid network `{value}`; expected mainnet, testnet, or futurenet"
+        ))),
+    }
+}
+
+fn deserialize_optional_networks<'de, D>(deserializer: D) -> Result<Option<Vec<Network>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct NetworksVisitor;
+
+    impl<'de> Visitor<'de> for NetworksVisitor {
+        type Value = Option<Vec<Network>>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a comma-separated string or sequence of network names")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut networks = Vec::new();
+            while let Some(network) = seq.next_element::<Network>()? {
+                networks.push(network);
+            }
+
+            if networks.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(networks))
+            }
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let networks: Result<Vec<_>, _> = value
+                .split(',')
+                .map(str::trim)
+                .filter(|network| !network.is_empty())
+                .map(parse_network_value)
+                .collect();
+
+            let networks = networks?;
+            if networks.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(networks))
+            }
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            self.visit_str(&value)
+        }
+
+        fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            self.visit_str(value)
+        }
+    }
+
+    deserializer.deserialize_any(NetworksVisitor)
 }
 
 /// Upgrade strategy for contract upgrades
@@ -764,6 +857,7 @@ pub struct ContractSearchParams {
     pub query: Option<String>,
     pub network: Option<Network>,
     /// Multiple networks filter (e.g. ?networks=mainnet&networks=testnet)
+    #[serde(default, deserialize_with = "deserialize_optional_networks")]
     pub networks: Option<Vec<Network>>,
     pub verified_only: Option<bool>,
     /// Filter by verification_status (unverified, pending, verified, failed)
@@ -937,6 +1031,37 @@ pub struct AdvancedSearchRequest {
     pub offset: Option<i64>,
     pub sort_by: Option<SortBy>,
     pub sort_order: Option<SortOrder>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ContractSearchParams, Network};
+
+    #[test]
+    fn parses_comma_separated_networks() {
+        let params: ContractSearchParams = serde_json::from_str(
+            r#"{"networks":"mainnet,testnet"}"#,
+        )
+        .expect("query params should deserialize");
+
+        assert_eq!(
+            params.networks,
+            Some(vec![Network::Mainnet, Network::Testnet])
+        );
+    }
+
+    #[test]
+    fn parses_sequence_networks() {
+        let params: ContractSearchParams = serde_json::from_str(
+            r#"{"networks":["mainnet","futurenet"]}"#,
+        )
+        .expect("query params should deserialize");
+
+        assert_eq!(
+            params.networks,
+            Some(vec![Network::Mainnet, Network::Futurenet])
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, utoipa::ToSchema)]
@@ -1626,7 +1751,7 @@ pub struct RecordPerformanceMetricRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct RecordPerformanceBenchmarkRequest {
-    pub contract_id: String,
+    pub contract_id: Option<String>,
     pub contract_version_id: Option<String>,
     pub benchmark_name: String,
     pub execution_time_ms: f64,
@@ -1711,85 +1836,6 @@ pub struct CreateAlertConfigRequest {
     pub threshold_type: String,
     pub threshold_value: f64,
     pub severity: Option<AlertSeverity>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct PerformanceBenchmark {
-    pub id: Uuid,
-    pub contract_id: Uuid,
-    pub contract_version_id: Option<Uuid>,
-    pub version: Option<String>,
-    pub benchmark_name: String,
-    pub execution_time_ms: f64,
-    pub gas_used: i64,
-    pub sample_size: i32,
-    pub source: String,
-    pub recorded_at: DateTime<Utc>,
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct PerformanceMetricSnapshot {
-    pub metric_type: String,
-    pub benchmark_name: Option<String>,
-    pub latest_value: f64,
-    pub previous_value: Option<f64>,
-    pub change_percent: Option<f64>,
-    pub recorded_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct PerformanceTrendPoint {
-    pub bucket_start: DateTime<Utc>,
-    pub bucket_end: DateTime<Utc>,
-    pub benchmark_name: String,
-    pub avg_execution_time_ms: f64,
-    pub avg_gas_used: f64,
-    pub sample_count: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct PerformanceRegression {
-    pub benchmark_name: String,
-    pub current_version: Option<String>,
-    pub previous_version: Option<String>,
-    pub execution_time_regression_percent: Option<f64>,
-    pub gas_regression_percent: Option<f64>,
-    pub severity: String,
-    pub detected_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct PerformanceComparisonEntry {
-    pub contract_id: Uuid,
-    pub contract_name: String,
-    pub category: Option<String>,
-    pub benchmark_name: String,
-    pub avg_execution_time_ms: f64,
-    pub avg_gas_used: f64,
-    pub sample_count: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct ContractPerformanceSummaryResponse {
-    pub contract_id: Uuid,
-    pub latest_benchmarks: Vec<PerformanceBenchmark>,
-    pub metric_snapshots: Vec<PerformanceMetricSnapshot>,
-    pub trends: Vec<PerformanceTrendPoint>,
-    pub regressions: Vec<PerformanceRegression>,
-    pub comparisons: Vec<PerformanceComparisonEntry>,
-    pub unresolved_alerts: Vec<PerformanceAlert>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct RecordPerformanceBenchmarkRequest {
-    pub contract_version_id: Option<String>,
-    pub benchmark_name: String,
-    pub execution_time_ms: f64,
-    pub gas_used: i64,
-    pub sample_size: Option<i32>,
-    pub source: Option<String>,
-    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema)]
@@ -2012,6 +2058,7 @@ pub struct DailyAggregate {
     pub verification_count: i32,
     pub publish_count: i32,
     pub version_count: i32,
+    pub update_count: i32,
     pub total_events: i32,
     pub unique_users: i32,
     pub network_breakdown: serde_json::Value,
@@ -3611,7 +3658,9 @@ pub enum ScanStatus {
 }
 
 /// Security issue severity
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema, PartialEq, PartialOrd)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema, PartialEq, PartialOrd,
+)]
 #[sqlx(type_name = "issue_severity_type", rename_all = "lowercase")]
 pub enum IssueSeverity {
     Low,
