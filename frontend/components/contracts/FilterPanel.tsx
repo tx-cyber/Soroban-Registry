@@ -156,21 +156,51 @@ function MultiSelectDropdown({
               })}
             </div>
 
-            <div className="flex items-center justify-between border-t border-border px-3 py-2">
-              <span className="text-xs text-muted-foreground">
-                {selectedValues.length === 0 ? 'No filters selected' : `${selectedValues.length} selected`}
-              </span>
-              <button
-                type="button"
-                onClick={onClear}
-                disabled={selectedValues.length === 0}
-                className="text-xs font-medium text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
+function CheckboxGroup({
+  title,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+        {title}
+      </p>
+      <div className="space-y-1.5">
+        {options.map((option) => {
+          const isSelected = selected.includes(option);
+          return (
+            <button
+              key={option}
+              type="button"
+              role="checkbox"
+              aria-checked={isSelected}
+              onClick={() => onToggle(option)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm capitalize transition-all ${
+                isSelected
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <div
+                className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                  isSelected ? 'bg-primary border-primary' : 'border-border'
+                }`}
               >
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
+                {isSelected && (
+                  <Check className="w-3 h-3 text-primary-foreground" />
+                )}
+              </div>
+              {option}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -209,27 +239,12 @@ export function FilterPanel({
     }));
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted/30 px-3 py-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">Refine discovery</p>
-          <p className="text-xs text-muted-foreground">
-            {activeFilterCount === 0
-              ? 'No filters applied'
-              : `${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onResetAll}
-          disabled={activeFilterCount === 0}
-          className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          Reset
-        </button>
-      </div>
+      <CheckboxGroup
+        title="Network"
+        options={networks}
+        selected={selectedNetworks}
+        onToggle={onToggleNetwork}
+      />
 
       <div className="space-y-3">
         <button
@@ -255,128 +270,28 @@ export function FilterPanel({
         )}
       </div>
 
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => toggleSection('networks')}
-          className="flex w-full items-center justify-between text-sm font-medium text-foreground hover:text-primary transition-colors"
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={verifiedOnly}
+        onClick={() => onVerifiedChange(!verifiedOnly)}
+        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
+          verifiedOnly
+            ? 'bg-green-500/10 text-green-600 font-medium'
+            : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+        }`}
+      >
+        <div
+          className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+            verifiedOnly ? 'bg-green-500 border-green-500' : 'border-border'
+          }`}
         >
-          <span>Networks</span>
-          <ChevronDown
-            className={`h-4 w-4 text-muted-foreground transition-transform ${expandedSections.networks ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {expandedSections.networks && (
-          <MultiSelectDropdown
-            label="Network filters"
-            placeholder="Choose networks"
-            options={networks}
-            selectedValues={selectedNetworks}
-            onToggle={onToggleNetwork}
-            onClear={onClearNetworks}
-          />
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => toggleSection('languages')}
-          className="flex w-full items-center justify-between text-sm font-medium text-foreground hover:text-primary transition-colors"
-        >
-          <span>Languages</span>
-          <ChevronDown
-            className={`h-4 w-4 text-muted-foreground transition-transform ${expandedSections.languages ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {expandedSections.languages && (
-          <div className="space-y-2 pt-1">
-            {languages.map((language) => (
-              <label
-                key={language}
-                className="flex items-center justify-between group cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`flex items-center justify-center w-4 h-4 rounded border transition-colors ${
-                      selectedLanguages.includes(language)
-                        ? 'bg-primary border-primary text-primary-foreground'
-                        : 'border-input group-hover:border-primary'
-                    }`}
-                  >
-                    {selectedLanguages.includes(language) && (
-                      <Check className="w-3 h-3" />
-                    )}
-                  </div>
-                  <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                    {language}
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={selectedLanguages.includes(language)}
-                  onChange={() => onToggleLanguage(language)}
-                />
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => toggleSection('other')}
-          className="flex w-full items-center justify-between text-sm font-medium text-foreground hover:text-primary transition-colors"
-        >
-          <span>Other filters</span>
-          <ChevronDown
-            className={`h-4 w-4 text-muted-foreground transition-transform ${expandedSections.other ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {expandedSections.other && (
-          <div className="space-y-4 pt-1">
-            <label className="flex items-center gap-2 group cursor-pointer">
-              <div
-                className={`flex items-center justify-center w-4 h-4 rounded border transition-colors ${
-                  verifiedOnly
-                    ? 'bg-primary border-primary text-primary-foreground'
-                    : 'border-input group-hover:border-primary'
-                }`}
-              >
-                {verifiedOnly && <Check className="w-3 h-3" />}
-              </div>
-              <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                Verified contracts only
-              </span>
-              <input
-                type="checkbox"
-                className="sr-only"
-                checked={verifiedOnly}
-                onChange={(event) => onVerifiedChange(event.target.checked)}
-              />
-            </label>
-
-            <div className="space-y-1.5">
-              <label htmlFor="author-input" className="text-xs text-muted-foreground font-medium">
-                Author
-              </label>
-              <input
-                id="author-input"
-                type="text"
-                placeholder="Filter by author..."
-                value={author}
-                onChange={(event) => onAuthorChange(event.target.value)}
-                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          </div>
-        )}
-      </div>
+          {verifiedOnly && (
+            <Check className="w-3 h-3 text-white" />
+          )}
+        </div>
+        Verified only
+      </button>
     </div>
   );
 }
