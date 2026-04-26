@@ -1,17 +1,19 @@
 'use client';
 
-import { Package, GitBranch, ChevronDown, BarChart2, Users, Menu, X, Layers, Search, Plus, Columns2, ShieldCheck, PieChart, TrendingUp, LogOut, Settings, Zap, Code2, User, Star } from 'lucide-react';
+import { Package, GitBranch, ChevronDown, BarChart2, Users, Menu, X, Layers, Search, Plus, Columns2, ShieldCheck, PieChart, TrendingUp, LogOut, Settings, Zap, Code2, User, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ThemeToggle from './ThemeToggle';
 import NotificationBell from './NotificationBell';
-import { useFavorites } from '@/hooks/useFavorites';
+import { useTranslation } from '@/lib/i18n/client';
+import LanguageSelector from './LanguageSelector';
 
 /* ─── nav links ──────────────────────────────────────────── */
 const NAV_LINKS = [
     { href: '/contracts',       label: 'Browse',  icon: Package   },
     { href: '/compare',         label: 'Compare', icon: Columns2  },
+    { href: '/marketplace',     label: 'Market',  icon: ShoppingCart },
     { href: '/verify-contract', label: 'Verify',  icon: ShieldCheck },
 ] as const;
 
@@ -23,13 +25,14 @@ const EXPLORE_LINKS = [
 ] as const;
 
 const QUICK_LINKS = [
-    { href: '/contracts',       label: 'Browse Contracts',   icon: Package   },
-    { href: '/compare',         label: 'Compare Contracts',  icon: Columns2  },
-    { href: '/publishers',      label: 'Publishers',          icon: Users     },
-    { href: '/stats',           label: 'Statistics',          icon: TrendingUp},
-    { href: '/analytics',       label: 'Analytics',           icon: PieChart  },
-    { href: '/templates',       label: 'Templates',           icon: Layers    },
-    { href: '/graph',           label: 'Dependency Graph',    icon: GitBranch },
+    { href: '/contracts',  label: 'Browse Contracts',   icon: Package   },
+    { href: '/compare',    label: 'Compare Contracts',  icon: Columns2  },
+    { href: '/publishers', label: 'Publishers',          icon: Users     },
+    { href: '/stats',      label: 'Statistics',          icon: TrendingUp},
+    { href: '/analytics',  label: 'Analytics',           icon: PieChart  },
+    { href: '/templates',  label: 'Templates',           icon: Layers    },
+    { href: '/graph',      label: 'Dependency Graph',    icon: GitBranch },
+    { href: '/marketplace', label: 'Marketplace',       icon: ShoppingCart },
     { href: '/verify-contract', label: 'Verify Contract', icon: ShieldCheck },
 ] as const;
 
@@ -178,6 +181,8 @@ function SearchModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
 
 /* ─── Navbar ────────────────────────────────────────────────── */
 export default function Navbar() {
+    const { t, i18n } = useTranslation('');
+    const lng = i18n.resolvedLanguage || 'en';
     const pathname = usePathname() ?? '';
     const scrolled = useScrolled();
     const { favoritesCount } = useFavorites();
@@ -262,7 +267,7 @@ export default function Navbar() {
                                     aria-current={isActive(href) ? 'page' : undefined}
                                 >
                                     <Icon className="w-3 h-3" />
-                                    {label}
+                                    {t(`navbar.${label.toLowerCase()}`, label)}
                                 </Link>
                             ))}
 
@@ -346,6 +351,7 @@ export default function Navbar() {
                                 <kbd className="hidden xl:block px-1 py-0.5 rounded border border-border bg-accent text-[10px] font-mono text-muted-foreground group-hover:border-primary/30 transition-colors">⌘K</kbd>
                             </button>
 
+                            <LanguageSelector lng={lng} />
                             <ThemeToggle />
                             <NotificationBell />
 
@@ -454,6 +460,7 @@ export default function Navbar() {
                                 <Search className="w-5 h-5" />
                             </button>
 
+                            <LanguageSelector lng={lng} />
                             <ThemeToggle />
 
                             {/* Hamburger / close */}
@@ -545,19 +552,19 @@ export default function Navbar() {
                                     href={href}
                                     onClick={() => setMobileOpen(false)}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                                        isActive(href)
+                                        pathname === href
                                             ? 'text-primary bg-primary/10'
                                             : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                                     }`}
-                                    aria-current={isActive(href) ? 'page' : undefined}
+                                    aria-current={pathname === href ? 'page' : undefined}
                                 >
                                     <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-                                        isActive(href) ? 'bg-primary/20' : 'bg-accent'
+                                        pathname === href ? 'bg-primary/20' : 'bg-accent'
                                     }`}>
-                                        <Icon className={`w-3.5 h-3.5 ${isActive(href) ? 'text-primary' : 'text-muted-foreground'}`} />
+                                        <Icon className={`w-3.5 h-3.5 ${pathname === href ? 'text-primary' : 'text-muted-foreground'}`} />
                                     </span>
                                     {label}
-                                    {isActive(href) && (
+                                    {pathname === href && (
                                         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
                                     )}
                                 </Link>
