@@ -12,6 +12,7 @@
 
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     Json,
 };
 use chrono::NaiveDate;
@@ -77,6 +78,50 @@ pub struct NetworkAnalytics {
 pub struct AnalyticsSummaryResponse {
     pub by_category: Vec<CategoryAnalytics>,
     pub by_network: Vec<NetworkAnalytics>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct WebVitalMetric {
+    pub id: String,
+    pub name: String,
+    pub value: f64,
+    pub rating: Option<String>,
+    pub delta: Option<f64>,
+    pub navigation_type: Option<String>,
+}
+
+pub async fn record_web_vitals(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(metric): Json<WebVitalMetric>,
+) -> ApiResult<StatusCode> {
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    
+    let referer = headers
+        .get(axum::http::header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    sqlx::query(
+        "INSERT INTO web_vitals (metric_id, name, value, rating, delta, navigation_type, url, user_agent) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+    )
+    .bind(&metric.id)
+    .bind(&metric.name)
+    .bind(metric.value)
+    .bind(metric.rating)
+    .bind(metric.delta)
+    .bind(metric.navigation_type)
+    .bind(referer)
+    .bind(user_agent)
+    .execute(&state.db)
+    .await
+    .map_err(|err| db_err("record web vitals", err))?;
+
+    Ok(StatusCode::OK)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

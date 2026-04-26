@@ -7,11 +7,11 @@ use shared::error::Result;
 use shared::source_storage::SourceStorage;
 
 use prometheus::Registry;
-use shared::source_storage::SourceStorage;
 use sqlx::PgPool;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+use crate::SearchClient;
 
 
 use tokio::sync::broadcast;
@@ -55,8 +55,7 @@ pub struct AppState {
     pub resource_mgr: Arc<RwLock<ResourceManager>>,
     pub source_storage: Arc<SourceStorage>,
     pub event_broadcaster: broadcast::Sender<RealtimeEvent>,
-    pub contract_events: Arc<ContractEventHub>,
-    pub source_storage: Arc<shared::source_storage::SourceStorage>,
+    pub search: Arc<SearchClient>,
 }
 
 
@@ -66,7 +65,7 @@ impl AppState {
         registry: Registry,
         job_engine: Arc<soroban_batch::engine::JobEngine>,
         is_shutting_down: Arc<AtomicBool>,
-    ) -> Result<Self, shared::error::RegistryError> {
+    ) -> shared::error::Result<Self> {
         let config = CacheConfig::from_env();
         let auth_mgr = Arc::new(RwLock::new(
             AuthManager::from_env().expect("JWT config validated at startup"),
@@ -75,6 +74,9 @@ impl AppState {
         let contract_events = Arc::new(ContractEventHub::from_env());
         let source_storage = Arc::new(SourceStorage::new().await?);
         let (event_broadcaster, _) = broadcast::channel(100);
+        let elasticsearch_url = std::env::var("ELASTICSEARCH_URL").unwrap_or_else(|_| "http://localhost:9200".to_string());
+        let search = Arc::new(SearchClient::new(&elasticsearch_url).expect("Search client init"));
+
         Ok(Self {
             db,
             started_at: Instant::now(),
@@ -88,12 +90,7 @@ impl AppState {
             resource_mgr,
             source_storage,
             event_broadcaster,
-            contract_events: Arc::new(ContractEventHub::from_env()),
-            source_storage: Arc::new(
-                shared::source_storage::SourceStorage::new()
-                    .await
-                    .expect("source storage init"),
-            ),
+            search,
         })
     }
 }

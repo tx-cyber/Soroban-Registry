@@ -4,7 +4,7 @@ use crate::{
     ab_test_handlers, analytics_handlers, auth, auth_handlers, batch_verify_handlers,
     breaking_changes, canary_handlers, category_handlers, clone_federation_handlers,
     compatibility_testing_handlers, contract_events, custom_metrics_handlers,
-    deprecation_handlers, handlers, interoperability_handlers, metrics_handler,
+    deprecation_handlers, gas_estimation_handlers, handlers, interoperability_handlers, metrics_handler,
     migration_handlers, org_handlers, performance_handlers, resource_handlers,
     security_scan_handlers, similarity_handlers, simulation_handlers, state::AppState,
     subscription_handlers, websocket,
@@ -71,6 +71,14 @@ pub fn contract_routes() -> Router<AppState> {
             get(handlers::get_contract_search_suggestions),
         )
         .route(
+            "/api/search",
+            get(handlers::search::search_contracts),
+        )
+        .route(
+            "/api/search/autocomplete",
+            get(handlers::search::autocomplete),
+        )
+        .route(
             "/api/contracts/trending",
             get(handlers::get_trending_contracts),
         )
@@ -81,6 +89,22 @@ pub fn contract_routes() -> Router<AppState> {
         .route(
             "/api/contracts/:id/metadata",
             patch(handlers::update_contract_metadata),
+        )
+        .route(
+            "/api/contracts/:id/metadata-versions",
+            get(handlers::contract_metadata::get_metadata_versions),
+        )
+        .route(
+            "/api/contracts/:id/metadata-versions/:version_id",
+            get(handlers::contract_metadata::get_metadata_version),
+        )
+        .route(
+            "/api/contracts/:id/metadata-rollback/:version_id",
+            post(handlers::contract_metadata::rollback_metadata),
+        )
+        .route(
+            "/api/contracts/:id/metadata-compare/:v1_id/:v2_id",
+            get(handlers::contract_metadata::compare_metadata_versions),
         )
         .route(
             "/api/contracts/:id/publisher",
@@ -183,6 +207,10 @@ pub fn contract_routes() -> Router<AppState> {
         .route(
             "/api/analytics/dashboard",
             get(analytics_handlers::get_analytics_summary),
+        )
+        .route(
+            "/api/analytics/vitals",
+            post(analytics_handlers::record_web_vitals),
         )
 
         .route(

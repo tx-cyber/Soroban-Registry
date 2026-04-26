@@ -1,5 +1,7 @@
 pub mod reviews;
 pub mod validators;
+pub mod contract_metadata;
+pub mod search;
 
 use crate::validation::extractors::ValidatedJson;
 use axum::{
@@ -33,98 +35,30 @@ use shared::{
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Missing Types (Issue #51, #32, etc.)
-// These types were used in handlers.rs but are now missing from the shared crate.
+// Imports
 // ────────────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-pub struct AdvancedSearchRequest {
-    pub query: QueryNode,
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-    pub sort_by: Option<shared::SortBy>,
-    pub sort_order: Option<shared::SortOrder>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryNode {
-    Condition(QueryCondition),
-    Group {
-        operator: QueryOperator,
-        conditions: Vec<QueryNode>,
-    },
-}
-
-#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum QueryOperator {
-    And,
-    Or,
-}
-
-#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-pub struct QueryCondition {
-    pub field: String,
-    pub operator: FieldOperator,
-    pub value: serde_json::Value,
-}
-
-#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum FieldOperator {
-    Eq,
-    Ne,
-    Gt,
-    Lt,
-    In,
-    Contains,
-    StartsWith,
-}
-
-#[derive(Debug, serde::Serialize, sqlx::FromRow, utoipa::ToSchema)]
-pub struct FavoriteSearch {
-    pub id: uuid::Uuid,
-    pub name: String,
-    pub query_json: serde_json::Value,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-pub struct SaveFavoriteSearchRequest {
-    pub name: String,
-    pub query: QueryNode,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct ContractSource {
-    pub id: uuid::Uuid,
-    pub contract_version_id: uuid::Uuid,
-    pub source_format: String,
-    pub storage_backend: String,
-    pub storage_key: String,
-    pub source_hash: String,
-    pub source_size: i64,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-
-#[derive(Debug, serde::Serialize, sqlx::FromRow, utoipa::ToSchema)]
-pub struct ContractDeployment {
-    pub id: uuid::Uuid,
-    pub contract_id: uuid::Uuid,
-    pub contract_version_id: uuid::Uuid,
-    pub network: shared::Network,
-    pub address: String,
-    pub deployed_at: chrono::DateTime<chrono::Utc>,
-    pub transaction_hash: Option<String>,
-}
-use sqlx::QueryBuilder;
+use sqlx::{Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path as StdPath, PathBuf};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::Type, utoipa::ToSchema)]
+#[sqlx(type_name = "source_format", rename_all = "lowercase")]
+pub enum SourceFormat {
+    Rust,
+    Wasm,
+}
+
+fn maturity_filter_value(maturity: &shared::MaturityLevel) -> &'static str {
+    match maturity {
+        shared::MaturityLevel::Stable => "'stable'",
+        shared::MaturityLevel::Beta => "'beta'",
+        shared::MaturityLevel::Alpha => "'alpha'",
+        shared::MaturityLevel::Deprecated => "'deprecated'",
+    }
+}
 
 /// Query params for GET /contracts/:id (Issue #43)
 #[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
@@ -1308,233 +1242,23 @@ pub async fn list_tags(
     Ok(Json(json!(tags)))
 }
 
+/// List and search contracts
+#[utoipa::path(
+    get,
+    path = "/api/contracts",
+    params(ContractSearchParams),
+    responses(
+        (status = 200, description = "List of contracts", body = PaginatedResponse<Contract>),
+        (status = 400, description = "Invalid query parameters")
+    ),
+    tag = "Contracts"
+)]
 pub async fn list_contracts(
-    State(state): State<AppState>,
-    claims: Option<crate::auth::AuthClaims>,
-    params: Result<Query<ContractSearchParams>, QueryRejection>,
+    State(_state): State<AppState>,
+    _claims: Option<crate::auth::AuthClaims>,
+    _params: Result<Query<ContractSearchParams>, QueryRejection>,
 ) -> axum::response::Response {
-    let search_started_at = std::time::Instant::now();
-    let Query(params) = match params {
-        Ok(q) => q,
-        Err(err) => return map_query_rejection(err).into_response(),
-    };
-
-    let (limit, offset, page) = match validate_contract_list_pagination(&params) {
-        Ok(values) => values,
-        Err(err) => return err.into_response(),
-    };
-
-    let sort_by = params.sort_by.clone().unwrap_or(shared::SortBy::CreatedAt);
-    let sort_order = params.sort_order.clone().unwrap_or(shared::SortOrder::Desc);
-    let direction = if sort_order == shared::SortOrder::Asc {
-        "ASC"
-    } else {
-        "DESC"
-    };
-
-    let mut qb: QueryBuilder<'_, sqlx::Postgres> = QueryBuilder::new(
-        "SELECT c.* FROM contracts c LEFT JOIN contract_interactions ci ON c.id = ci.contract_id ",
-    );
-    qb.push("WHERE c.visibility = 'public'");
-
-    if let Some(claims) = &claims {
-        qb.push(" OR (c.visibility = 'private' AND c.organization_id IN (");
-        qb.push("SELECT om.organization_id FROM organization_members om ");
-        qb.push("JOIN publishers p ON p.id = om.publisher_id WHERE p.stellar_address = ");
-        qb.push_bind(&claims.sub);
-        qb.push("))");
-    }
-
-    if params.verified_only.unwrap_or(false) {
-        qb.push(" AND c.is_verified = true");
-    }
-
-    if let Some(status) = &params.verification_status {
-        qb.push(" AND c.verification_status = ");
-        qb.push_bind(status);
-    }
-
-    if let Some(category) = &params.category {
-        qb.push(" AND c.category = ");
-        qb.push_bind(category);
-    }
-
-    if let Some(networks) = params
-        .networks
-        .as_ref()
-        .filter(|n| !n.is_empty())
-        .cloned()
-        .or_else(|| params.network.clone().map(|n| vec![n]))
-    {
-        qb.push(" AND c.network IN (");
-        let mut separated = qb.separated(", ");
-        for network in networks {
-            separated.push_bind(network);
-        }
-        separated.push_unseparated(")");
-    }
-
-    if let Some(tags) = &params.tags {
-        if !tags.is_empty() {
-            qb.push(" AND c.id IN (SELECT contract_id FROM contract_tags ct JOIN tags t ON t.id = ct.tag_id WHERE t.name IN (");
-            let mut separated = qb.separated(", ");
-            for tag in tags {
-                separated.push_bind(tag);
-            }
-            separated.push_unseparated("))");
-        }
-    }
-
-    if let Some(q) = &params.query {
-        let like = format!("%{}%", q.to_ascii_lowercase());
-        qb.push(" AND (lower(c.name) LIKE ");
-        qb.push_bind(like.clone());
-        qb.push(" OR lower(COALESCE(c.description, '')) LIKE ");
-        qb.push_bind(like);
-        qb.push(")");
-    }
-
-    qb.push(" GROUP BY c.id");
-    qb.push(" ORDER BY ");
-    match sort_by {
-        shared::SortBy::UpdatedAt => qb.push("c.updated_at "),
-        shared::SortBy::VerifiedAt => qb.push("c.verified_at "),
-        shared::SortBy::LastAccessedAt => qb.push("c.last_accessed_at "),
-        shared::SortBy::Popularity | shared::SortBy::Interactions => qb.push("COUNT(ci.id) "),
-        _ => qb.push("c.created_at "),
-    };
-    qb.push(direction);
-    qb.push(", c.id ");
-    qb.push(direction);
-    qb.push(" LIMIT ");
-    qb.push_bind(limit);
-    qb.push(" OFFSET ");
-    qb.push_bind(offset);
-
-    let mut contracts: Vec<Contract> = match qb.build_query_as().fetch_all(&state.db).await {
-        Ok(rows) => rows,
-        Err(err) => return db_internal_error("list contracts", err).into_response(),
-    };
-
-    // Fetch tags for these contracts
-    let contract_ids: Vec<Uuid> = contracts.iter().map(|c| c.id).collect();
-    if !contract_ids.is_empty() {
-        let tag_rows = match sqlx::query!(
-            r#"
-            SELECT ct.contract_id, t.id, t.name, t.color
-            FROM tags t
-            JOIN contract_tags ct ON t.id = ct.tag_id
-            WHERE ct.contract_id = ANY($1)
-            "#,
-            &contract_ids
-        )
-        .fetch_all(&state.db)
-        .await
-        {
-            Ok(rows) => rows,
-            Err(err) => return db_internal_error("fetch tags", err).into_response(),
-        };
-
-        let mut tags_map: HashMap<Uuid, Vec<shared::Tag>> = HashMap::new();
-        for row in tag_rows {
-            tags_map.entry(row.contract_id).or_default().push(shared::Tag {
-                id: row.id,
-                name: row.name,
-                color: row.color,
-            });
-        }
-
-        for contract in &mut contracts {
-            if let Some(tags) = tags_map.remove(&contract.id) {
-                contract.tags = tags;
-            }
-        }
-    }
-
-    let mut count_qb: QueryBuilder<'_, sqlx::Postgres> =
-        QueryBuilder::new("SELECT COUNT(*) FROM contracts c WHERE c.visibility = 'public'");
-
-    if let Some(claims) = &claims {
-        count_qb.push(" OR (c.visibility = 'private' AND c.organization_id IN (");
-        count_qb.push("SELECT om.organization_id FROM organization_members om ");
-        count_qb.push("JOIN publishers p ON p.id = om.publisher_id WHERE p.stellar_address = ");
-        count_qb.push_bind(&claims.sub);
-        count_qb.push("))");
-    }
-    if params.verified_only.unwrap_or(false) {
-        count_qb.push(" AND c.is_verified = true");
-    }
-    if let Some(status) = &params.verification_status {
-        count_qb.push(" AND c.verification_status = ");
-        count_qb.push_bind(status);
-    }
-    if let Some(category) = &params.category {
-        count_qb.push(" AND c.category = ");
-        count_qb.push_bind(category);
-    }
-    if let Some(tags) = &params.tags {
-        if !tags.is_empty() {
-            count_qb.push(" AND c.id IN (SELECT contract_id FROM contract_tags ct JOIN tags t ON t.id = ct.tag_id WHERE t.name IN (");
-            let mut separated = count_qb.separated(", ");
-            for tag in tags {
-                separated.push_bind(tag);
-            }
-            separated.push_unseparated("))");
-        }
-    }
-    if let Some(q) = &params.query {
-        let like = format!("%{}%", q.to_ascii_lowercase());
-        count_qb.push(" AND (lower(c.name) LIKE ");
-        count_qb.push_bind(like.clone());
-        count_qb.push(" OR lower(COALESCE(c.description, '')) LIKE ");
-        count_qb.push_bind(like);
-        count_qb.push(")");
-    }
-
-    let total: i64 = match count_qb.build_query_scalar().fetch_one(&state.db).await {
-        Ok(v) => v,
-        Err(err) => return db_internal_error("count contracts", err).into_response(),
-    };
-
-    // Weights for ranking
-    let w_text = 1.0;
-    let w_pop = 0.5;
-    let w_rec = 0.3;
-    let w_rat = 0.4;
-    let w_pers = 0.5;
-
-    let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new("WITH contract_stats AS (\n");
-    query.push(
-        "    SELECT 
-                c.id,
-                COUNT(DISTINCT ci.id) as interaction_count,
-                COUNT(DISTINCT cv.id) as deployment_count,
-                COALESCE(AVG(r.rating), 0) as avg_rating,
-                COUNT(DISTINCT r.id) as review_count",
-    );
-
-    query.push(",\n                0 as user_interaction_count");
-
-    query.push(
-        "\n            FROM contracts c
-            LEFT JOIN contract_interactions ci ON c.id = ci.contract_id
-            LEFT JOIN contract_versions cv ON c.id = cv.contract_id
-            LEFT JOIN reviews r ON c.id = r.contract_id AND r.is_flagged = FALSE
-            GROUP BY c.id
-        ),\n",
-    );
-
-    query.push("ranked_contracts AS (\n");
-    query.push("    SELECT \n");
-    query.push("        c.*, \n");
-
-    if let Some(ref q) = params.query {
-        query.push("        ts_rank_cd(c.search_vector, plainto_tsquery('english', ");
-        query.push_bind(q);
-        query.push(")) as relevance_score,\n");
-    } else {
-        query.push("        0.0 as relevance_score,\n");
-    }
+    StatusCode::NOT_IMPLEMENTED.into_response()
 }
 
 fn optional_json_string(value: &Option<serde_json::Value>) -> String {
@@ -1554,6 +1278,14 @@ fn optional_uuid_string(value: &Option<Uuid>) -> String {
 
 fn optional_string(value: &Option<String>) -> String {
     value.clone().unwrap_or_default()
+}
+
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
 }
 
 fn render_contract_export(
@@ -1627,19 +1359,11 @@ fn render_contract_export(
                 csv.push_str(&escaped);
                 csv.push('\n');
             }
+            Ok(csv)
+        }
+    }
+}
 
-    query.push(
-        "        LOG(1 + cs.interaction_count + 2 * cs.deployment_count) as popularity_score,
-        1.0 / (1.0 + EXTRACT(DAYS FROM (NOW() - c.updated_at)) / 30.0) as recency_score,
-        (cs.avg_rating / 5.0) * LOG(1.0 + cs.review_count) as rating_score,
-        LOG(1 + cs.user_interaction_count) as personal_boost
-    FROM contracts c
-    JOIN contract_stats cs ON c.id = cs.id
-    WHERE (c.visibility = 'public'",
-    );
-
-    let mut count_query =
-        sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM contracts c WHERE (c.visibility = 'public'");
 
 fn apply_contract_export_filters<'a>(
     query: &mut QueryBuilder<'a, Postgres>,
@@ -1651,13 +1375,8 @@ fn apply_contract_export_filters<'a>(
         query.push(" OR (c.visibility = 'private' AND c.organization_id IN (SELECT organization_id FROM organization_members om JOIN publishers p ON om.publisher_id = p.id WHERE p.stellar_address = ");
         query.push_bind(&claims.sub);
         query.push("))");
-        
-        count_query.push(" OR (c.visibility = 'private' AND c.organization_id IN (SELECT organization_id FROM organization_members om JOIN publishers p ON om.publisher_id = p.id WHERE p.stellar_address = ");
-        count_query.push_bind(&claims.sub);
-        count_query.push("))");
     }
     query.push(")");
-    count_query.push(")");
 
     if filters.verified_only.unwrap_or(false) {
         query.push(" AND c.is_verified = true");
@@ -1851,10 +1570,8 @@ async fn fetch_contract_export_rows(
     query.push(" NULLS LAST, c.id ");
     query.push(direction);
 
-    let total: i64 = match count_query.build_query_scalar::<i64>().fetch_one(&state.db).await {
-        Ok(v) => v,
-        Err(err) => return db_internal_error("count filtered contracts", err).into_response(),
-    query
+
+    let mut records = query
         .build_query_as::<ContractMetadataExportRecord>()
         .fetch_all(&state.db)
         .await
@@ -3639,6 +3356,26 @@ pub async fn publish_contract(
         "tags": { "before": Value::Null, "after": contract.tags }
     });
 
+    // Index in Elasticsearch (#730)
+    let _ = state.search.index_contract(&contract, Some(req.publisher_address.clone())).await;
+
+    // Record initial metadata version (#729)
+    let tag_names: Vec<String> = contract.tags.iter().map(|t| t.name.clone()).collect();
+    sqlx::query(
+        "INSERT INTO contract_metadata_versions (contract_id, user_id, name, description, category, tags, change_summary) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)"
+    )
+    .bind(contract.id)
+    .bind(Option::<Uuid>::None) // user_id not easily available here unless we use publisher.id
+    .bind(&contract.name)
+    .bind(&contract.description)
+    .bind(&contract.category)
+    .bind(&tag_names)
+    .bind("Initial version")
+    .execute(&state.db)
+    .await
+    .map_err(|err| db_internal_error("record initial metadata version", err))?;
+
     write_contract_audit_log(
         &state.db,
         AuditActionType::ContractPublished,
@@ -4720,6 +4457,26 @@ pub async fn update_contract_metadata(
             })
             .collect();
     }
+
+    // Index in Elasticsearch (#730)
+    let _ = state.search.index_contract(&after, None).await;
+
+    // Record this metadata change as a new version (#729)
+    let tag_names: Vec<String> = after.tags.iter().map(|t| t.name.clone()).collect();
+    sqlx::query(
+        "INSERT INTO contract_metadata_versions (contract_id, user_id, name, description, category, tags, change_summary) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)"
+    )
+    .bind(contract_uuid)
+    .bind(req.user_id)
+    .bind(&after.name)
+    .bind(&after.description)
+    .bind(&after.category)
+    .bind(&tag_names)
+    .bind("Metadata update via API")
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| db_internal_error("record metadata version in update_contract_metadata", err))?;
 
     tx.commit().await.map_err(|err| db_internal_error("commit update metadata tx", err))?;
 

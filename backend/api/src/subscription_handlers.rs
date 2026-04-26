@@ -16,7 +16,7 @@ use crate::{
 };
 use shared::{
     ContractSubscription, ContractSubscriptionSummary, CreateWebhookRequest,
-    NotificationChannel, NotificationFrequency, NotificationType, SubscribeRequest,
+    NotificationChannel, NotificationFrequency, NotificationQueueItem, NotificationType, SubscribeRequest,
     SubscriptionStatus, UpdateSubscriptionRequest, UpdateUserNotificationPreferencesRequest,
     UserNotificationPreferences, UserSubscriptionsResponse, WebhookConfiguration,
 };
@@ -138,35 +138,20 @@ pub async fn list_user_subscriptions(
     let limit = query.limit.unwrap_or(20);
     let offset = query.offset.unwrap_or(0);
 
-    let mut where_clause = "WHERE cs.user_id = $1".to_string();
-    if let Some(status) = &query.status {
-        where_clause.push_str(&format!(" AND cs.status = ${}", 2));
-    }
+    let status_filter = query.status.as_ref();
 
     let subscriptions = sqlx::query_as::<_, ContractSubscriptionSummary>(&format!(
-        r#"
-        SELECT 
-            cs.id,
-            cs.contract_id,
-            c.name as contract_name,
-            c.slug as contract_slug,
-            cs.status,
-            cs.notification_types,
-            cs.channels,
-            cs.frequency,
-            cs.created_at
-        FROM contract_subscriptions cs
-        JOIN contracts c ON cs.contract_id = c.id
-        {}
-        ORDER BY cs.created_at DESC
-        LIMIT ${} OFFSET ${}
-        "#,
-        where_clause,
-        if query.status.is_some() { 3 } else { 2 },
-        if query.status.is_some() { 4 } else { 3 }
+        "SELECT cs.*, c.name as contract_name 
+         FROM contract_subscriptions cs 
+         JOIN contracts c ON cs.contract_id = c.id 
+         WHERE cs.user_id = $1 {} 
+         LIMIT ${} OFFSET ${}",
+        if status_filter.is_some() { "AND cs.status = $2" } else { "" },
+        if status_filter.is_some() { 3 } else { 2 },
+        if status_filter.is_some() { 4 } else { 3 }
     ))
     .bind(user_id)
-    .bind(&query.status.unwrap_or_default())
+    .bind(status_filter)
     .bind(limit)
     .bind(offset)
     .fetch_all(&state.db)
@@ -175,14 +160,14 @@ pub async fn list_user_subscriptions(
 
     let total_count: i64 = sqlx::query_scalar(&format!(
         "SELECT COUNT(*) FROM contract_subscriptions {}",
-        if query.status.is_some() {
+        if status_filter.is_some() {
             "WHERE user_id = $1 AND status = $2"
         } else {
             "WHERE user_id = $1"
         }
     ))
     .bind(user_id)
-    .bind(&query.status.unwrap_or_default())
+    .bind(status_filter)
     .fetch_one(&state.db)
     .await
     .map_err(|e| ApiError::internal(format!("Database error: {}", e)))?;
@@ -207,10 +192,10 @@ pub async fn update_subscription(
     // Build dynamic update query
     let mut updates = Vec::new();
     if let Some(status) = &req.status {
-        updates.push(format!("status = '{}'", status));
+        updates.push(format!("status = '{:?}'", status).to_lowercase());
     }
     if let Some(types) = &req.notification_types {
-        updates.push(format!("notification_types = {:?}", types));
+        updates.push(format!("notification_types = '{:?}'", types));
     }
     if let Some(channels) = &req.channels {
         updates.push(format!("channels = {:?}", channels));
@@ -224,8 +209,8 @@ pub async fn update_subscription(
 
     updates.push("updated_at = NOW()".to_string());
 
-    if updates.is_empty() {
-        return Err(ApiError::bad_request("No fields to update"));
+    if updates.len() == 1 {
+        return Err(ApiError::bad_request("EmptyUpdate", "No fields to update"));
     }
 
     let update_clause = updates.join(", ");
@@ -327,8 +312,8 @@ pub async fn update_notification_preferences(
 
     updates.push(format!("updated_at = NOW()"));
 
-    if updates.is_empty() {
-        return Err(ApiError::bad_request("No fields to update"));
+    if updates.len() == 1 { // Only updated_at
+        return Err(ApiError::bad_request("EmptyUpdate", "No fields to update"));
     }
 
     let update_clause = updates.join(", ");

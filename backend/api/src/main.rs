@@ -1,69 +1,6 @@
 #![warn(unused_imports)]
 
-mod ab_test_handlers;
-mod aggregation;
-mod analytics;
-mod auth;
-mod auth_handlers;
-mod batch_verify_handlers;
-mod breaking_changes;
-mod cache;
-mod canary_handlers;
-mod compatibility_testing_handlers;
-mod contract_events;
-mod contributor_handlers;
-mod db_monitoring;
-mod graphql;
-mod interoperability;
-mod interoperability_handlers;
-
-mod activity_feed_handlers;
-mod activity_feed_routes;
-mod analytics_handlers;
-mod category_handlers;
-mod custom_metrics_handlers;
-mod dependency;
-mod dependency_handlers;
-mod deprecation_handlers;
-mod error;
-mod events;
-mod handlers;
-mod health;
-pub mod health_monitor;
-#[cfg(test)]
-mod health_tests;
-mod incident_handlers;
-mod incident_routes;
-mod metrics;
-mod metrics_handler;
-mod migration_handlers;
-mod models;
-mod multisig_handlers;
-mod multisig_routes;
-mod onchain_verification;
-#[cfg(feature = "openapi")]
-mod openapi;
-mod org_handlers;
-mod patch_handlers;
-mod performance_handlers;
-mod rate_limit;
-mod recommendation_handlers;
-mod release_notes_handlers;
-mod release_notes_routes;
-pub mod request_tracing;
-mod resource_handlers;
-mod resource_tracking;
-mod routes;
-pub mod security_log;
-pub mod signing_handlers;
-mod similarity_handlers;
-mod simulation;
-mod simulation_handlers;
-mod state;
-
-mod type_safety;
-mod validation;
-mod websocket;
+use api::*;
 
 use anyhow::Result;
 use axum::extract::{Request, State};
@@ -102,37 +39,20 @@ use crate::state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Load environment variables
-    dotenv().ok();
+    // Load and validate configuration (#768)
+    let config = config::load_config()?;
 
     // Initialize structured JSON tracing (ELK/Splunk compatible)
     request_tracing::init_json_tracing();
-
-    // Fail fast on startup when JWT configuration is invalid.
-    if let Err(err) = auth::AuthManager::from_env() {
-        tracing::error!(
-            error = %err,
-            "JWT authentication configuration is invalid. Set JWT_SECRET to a strong value with at least {} characters.",
-            auth::MIN_JWT_SECRET_LEN
-        );
-        return Err(anyhow::anyhow!(
-            "Invalid JWT authentication configuration: {}",
-            err
-        ));
-    }
-
-    // Database connection with dynamic pool size
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let logical_cores = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
 
-    let default_max_pool = (logical_cores * 2).max(10);
     let max_pool_size = std::env::var("DB_MAX_POOL_SIZE")
         .ok()
         .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(default_max_pool as u32);
+        .unwrap_or((logical_cores * 2).max(10) as u32);
 
     tracing::info!(
         max_pool_size = max_pool_size,
@@ -143,7 +63,9 @@ async fn main() -> Result<()> {
     let pool = PgPoolOptions::new()
         .max_connections(max_pool_size)
         .acquire_timeout(std::time::Duration::from_secs(30))
-        .connect(&database_url)
+        .connect_with(
+            config.database_url.parse::<sqlx::postgres::PgConnectOptions>()?
+        )
         .await?;
 
     // Run migrations (skip if SKIP_MIGRATIONS=true, useful when migrations were applied manually)

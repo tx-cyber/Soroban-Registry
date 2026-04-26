@@ -162,7 +162,7 @@ pub async fn get_contract_security_summary(
     Path(contract_id): Path<Uuid>,
 ) -> ApiResult<Json<ContractSecuritySummary>> {
     // Get contract name
-    let contract_name: Option<String> = sqlx::query_scalar("SELECT name FROM contracts WHERE id = $1")
+    let contract_name = sqlx::query_scalar("SELECT name FROM contracts WHERE id = $1")
         .bind(contract_id)
         .fetch_optional(&state.db)
         .await
@@ -302,8 +302,8 @@ pub async fn update_security_issue(
     Json(req): Json<UpdateSecurityIssueRequest>,
 ) -> ApiResult<Json<shared::SecurityIssue>> {
     // Verify issue belongs to contract
-    let existing: Option<(shared::SecurityIssue, Option<IssueStatus>)> = sqlx::query_as(
-        "SELECT *, NULL::issue_status_type as \"_\" FROM security_issues WHERE id = $1 AND contract_id = $2",
+    let existing: Option<shared::SecurityIssue> = sqlx::query_as(
+        "SELECT * FROM security_issues WHERE id = $1 AND contract_id = $2",
     )
     .bind(issue_id)
     .bind(contract_id)
@@ -311,8 +311,10 @@ pub async fn update_security_issue(
     .await
     .map_err(|e| ApiError::internal(format!("Database error: {}", e)))?;
 
-    let (mut issue, _old_status) = existing
+    let mut issue = existing
         .ok_or_else(|| ApiError::not_found("security_issue", "Security issue not found"))?;
+
+    let _old_status = issue.status;
 
     // Update issue status
     issue = sqlx::query_as::<_, shared::SecurityIssue>(
@@ -331,7 +333,7 @@ pub async fn update_security_issue(
     .map_err(|e| ApiError::internal(format!("Failed to update issue: {}", e)))?;
 
     // Log the action
-    if let Some(_old) = _old_status {
+    if _old_status != req.status {
         let _ = sqlx::query(
             r#"
             INSERT INTO security_issue_actions
@@ -340,7 +342,7 @@ pub async fn update_security_issue(
             "#,
         )
         .bind(issue_id)
-        .bind(_old)
+        .bind(_old_status)
         .bind(&req.status)
         .bind(&req.notes)
         .execute(&state.db)
@@ -435,7 +437,7 @@ pub async fn auto_scan_contract(
     )
     .bind(contract_id)
     .bind(contract_version_id)
-    .fetch_one(state)
+    .fetch_one(&state.db)
     .await
     .map_err(|e| ApiError::internal(format!("Failed to create auto scan: {}", e)))?;
 
